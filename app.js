@@ -28,12 +28,20 @@
     camera: { x: 0, y: 0, zoom: 30 },
     pointer: { x: 0, y: 0, downX: 0, downY: 0, worldX: 0, worldY: 0, dragging: false, moved: false },
     addMode: false,
+    moveMode: false,
+    grabbedBodyId: null,
+    grabbedGroupIds: [],
+    grabOffsetX: 0,
+    grabOffsetY: 0,
+    resumeAfterMove: true,
     launchStart: null,
     idCounter: 1,
     lastFrame: performance.now(),
     trailTick: 0,
+    relationshipTick: 0,
     fps: 60,
     stars: [],
+    milkyWay: [],
     effects: [],
     launchTargetId: null,
     launchMode: "impact",
@@ -139,6 +147,10 @@
     return body.mass * (body.gravityScale ?? 1);
   }
 
+  function pairGravityMass(a, b) {
+    return (a.gravityScale ?? 1) * (b.gravityScale ?? 1) * (a.mass + b.mass);
+  }
+
   function makeBody(data) {
     return {
       id: state.idCounter++,
@@ -148,7 +160,7 @@
       vx: data.vx || 0,
       vy: data.vy || 0,
       mass: Math.max(1e-12, data.mass ?? .1) / EARTHS_PER_SUN,
-      gravityScale: clamp(data.gravityScale ?? 1, 0, 2),
+      gravityScale: clamp(data.gravityScale ?? 1, 0, 100),
       radius: data.radius || .035,
       collisionRadius: data.collisionRadius || (data.radiusKm ? data.radiusKm / KM_PER_AU : estimatedCollisionRadius(data.mass ?? .1, data.texture)),
       color: data.color || "#9cb8d8",
@@ -171,8 +183,9 @@
     const distance = semiMajor * (1 - eccentricity);
     const direction = data.retrograde ? -1 : 1;
     const orbiterMass = Math.max(1e-12, data.mass ?? .1) / EARTHS_PER_SUN;
-    const orbiterGravityScale = clamp(data.gravityScale ?? 1, 0, 2);
-    const speed = Math.sqrt(G * (gravitationalMass(parent) + orbiterMass * orbiterGravityScale) * (2 / distance - 1 / semiMajor));
+    const orbiterGravityScale = clamp(data.gravityScale ?? 1, 0, 100);
+    const effectivePairMass = (parent.gravityScale ?? 1) * orbiterGravityScale * (parent.mass + orbiterMass);
+    const speed = Math.sqrt(G * effectivePairMass * (2 / distance - 1 / semiMajor));
     return makeBody({
       ...data,
       x: parent.x + Math.cos(angle) * distance,
@@ -226,17 +239,26 @@
   }
 
   function loadPreset(name, saveSnapshot = true) {
+    if (state.grabbedBodyId != null) finishBodyDrag();
+    state.moveMode = false;
+    state.grabbedBodyId = null;
+    state.grabbedGroupIds = [];
+    canvas.classList.remove("move-bodies", "grabbing-body");
+    ui.moveBodyMode.classList.remove("active");
+    ui.moveBodyMode.setAttribute("aria-pressed", "false");
     state.idCounter = 1;
     state.simYears = 0;
     state.selectedId = null;
     state.launchTargetId = null;
     state.orbitPlacement = false;
     state.effects = [];
+    state.relationshipTick = 0;
     if (name === "solar") {
       const sun = makeBody(planetData[0]);
       state.bodies = [sun];
       for (const planet of planetData.slice(1)) state.bodies.push(makeOrbiter(sun, { ...planet, distance: planet.x }));
       addMajorMoons();
+      recenterSubsystem(state.bodies, { x: 0, y: 0, vx: 0, vy: 0 });
       state.camera = { x: 0, y: 0, zoom: 17 };
     } else if (name === "earthMoon") {
       const earth = makeBody({ name: "Earth", mass: 1, radius: .08, radiusKm: 6371, color: "#4f9cff", texture: "earth" });
@@ -271,6 +293,7 @@
     state.running = true;
     if (name === "solar") fitView(true);
     if (saveSnapshot) state.initialSnapshot = serializeBodies();
+    updateInteractionHint();
     updateSelectionUI();
     renderSystemRoster();
     updateHUD();
@@ -282,6 +305,13 @@
   }
 
   function restoreSnapshot() {
+    if (state.grabbedBodyId != null) finishBodyDrag();
+    state.moveMode = false;
+    state.grabbedBodyId = null;
+    state.grabbedGroupIds = [];
+    canvas.classList.remove("move-bodies", "grabbing-body");
+    ui.moveBodyMode.classList.remove("active");
+    ui.moveBodyMode.setAttribute("aria-pressed", "false");
     const wasRunning = state.running;
     state.bodies = state.initialSnapshot.map((body) => ({ ...body, trail: [] }));
     state.idCounter = Math.max(1, ...state.bodies.map((b) => b.id + 1));
@@ -290,7 +320,9 @@
     state.launchTargetId = null;
     state.orbitPlacement = false;
     state.effects = [];
+    state.relationshipTick = 0;
     state.running = wasRunning;
+    updateInteractionHint();
     updateSelectionUI();
     renderSystemRoster();
     toast("Simulation reset");
@@ -316,6 +348,14 @@
       radius: random() * 1.25 + .2,
       alpha: random() * .55 + .18,
       blue: random() > .74,
+    }));
+    const bandCount = Math.min(620, Math.max(220, Math.floor((state.viewport.width * state.viewport.height) / 2500)));
+    state.milkyWay = Array.from({ length: bandCount }, () => ({
+      x: (random() - .5) * state.viewport.width * 1.9,
+      y: (random() + random() + random() - 1.5) * state.viewport.height * .18,
+      radius: .25 + random() * 1.35,
+      alpha: .08 + random() * .48,
+      warm: random() > .82,
     }));
   }
 
@@ -343,11 +383,12 @@
         const dy = b.y - a.y;
         const distSq = dx * dx + dy * dy + 1e-16;
         const invDist = 1 / Math.sqrt(distSq);
-        const factor = G * invDist * invDist * invDist;
-        acceleration[i].x += factor * gravitationalMass(b) * dx;
-        acceleration[i].y += factor * gravitationalMass(b) * dy;
-        acceleration[j].x -= factor * gravitationalMass(a) * dx;
-        acceleration[j].y -= factor * gravitationalMass(a) * dy;
+        const pairScale = (a.gravityScale ?? 1) * (b.gravityScale ?? 1);
+        const factor = G * pairScale * invDist * invDist * invDist;
+        acceleration[i].x += factor * b.mass * dx;
+        acceleration[i].y += factor * b.mass * dy;
+        acceleration[j].x -= factor * a.mass * dx;
+        acceleration[j].y -= factor * a.mass * dy;
       }
     }
     return acceleration;
@@ -545,6 +586,22 @@
     state.effects = state.effects.filter((effect) => effect.life > 0);
   }
 
+  function closestEncounterStep() {
+    let safestStep = Infinity;
+    for (let i = 0; i < state.bodies.length; i++) {
+      for (let j = i + 1; j < state.bodies.length; j++) {
+        const a = state.bodies[i];
+        const b = state.bodies[j];
+        const effectiveMass = pairGravityMass(a, b);
+        if (effectiveMass <= 0) continue;
+        const distance = Math.max(Math.hypot(b.x - a.x, b.y - a.y), 1e-9);
+        const dynamicalTime = Math.sqrt(distance ** 3 / (G * effectiveMass));
+        safestStep = Math.min(safestStep, dynamicalTime / 24);
+      }
+    }
+    return safestStep;
+  }
+
   function updateSimulation(realSeconds) {
     if (!state.running || state.speedDays <= 0 || !state.bodies.length) return;
     const requestedDt = realSeconds * state.speedDays * DAY_TO_YEAR;
@@ -552,15 +609,25 @@
       if (!body.orbit) return shortest;
       const parent = state.bodies.find((candidate) => candidate.id === body.orbit.parentId);
       if (!parent || !body.orbit.a) return shortest;
-      const period = Math.sqrt(body.orbit.a ** 3 / Math.max(gravitationalMass(parent) + gravitationalMass(body), 1e-15));
+      const period = Math.sqrt(body.orbit.a ** 3 / Math.max(pairGravityMass(parent, body), 1e-15));
       return Math.min(shortest, period);
     }, Infinity);
-    const accuracyStep = Math.min(.002 * DAY_TO_YEAR, Number.isFinite(shortestPeriod) ? shortestPeriod / 100 : .002 * DAY_TO_YEAR);
+    const encounterStep = closestEncounterStep();
+    const accuracyStep = Math.min(
+      .002 * DAY_TO_YEAR,
+      Number.isFinite(shortestPeriod) ? shortestPeriod / 100 : Infinity,
+      Number.isFinite(encounterStep) ? encounterStep : Infinity,
+    );
     const steps = Math.min(750, Math.max(1, Math.ceil(requestedDt / accuracyStep)));
     const simDt = Math.min(requestedDt, steps * accuracyStep);
     const dt = simDt / steps;
     for (let i = 0; i < steps; i++) integrate(dt);
     state.simYears += simDt;
+    state.relationshipTick += 1;
+    if (state.relationshipTick >= 12) {
+      state.relationshipTick = 0;
+      refreshOrbitalRelationships();
+    }
     state.trailTick += 1;
     if (state.trailTick >= 3 && state.trailLength > 0) {
       state.trailTick = 0;
@@ -579,11 +646,38 @@
     gradient.addColorStop(1, "#010308");
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
+    const parallaxX = Math.sin(state.camera.x * .07) * width * .04;
+    const parallaxY = Math.sin(state.camera.y * .07) * height * .035;
+    ctx.save();
+    ctx.translate(width * .5 + parallaxX, height * .48 + parallaxY);
+    ctx.rotate(-.27);
+    const galaxyGlow = ctx.createLinearGradient(0, -height * .3, 0, height * .3);
+    galaxyGlow.addColorStop(0, "rgba(28,54,102,0)");
+    galaxyGlow.addColorStop(.25, "rgba(63,91,151,.08)");
+    galaxyGlow.addColorStop(.44, "rgba(170,183,216,.15)");
+    galaxyGlow.addColorStop(.5, "rgba(224,215,197,.19)");
+    galaxyGlow.addColorStop(.58, "rgba(117,137,185,.13)");
+    galaxyGlow.addColorStop(.78, "rgba(45,72,129,.06)");
+    galaxyGlow.addColorStop(1, "rgba(18,38,78,0)");
+    ctx.fillStyle = galaxyGlow;
+    ctx.fillRect(-width * 1.2, -height * .32, width * 2.4, height * .64);
+    for (const star of state.milkyWay) {
+      ctx.fillStyle = star.warm ? `rgba(255,221,176,${star.alpha})` : `rgba(191,214,255,${star.alpha})`;
+      ctx.beginPath(); ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2); ctx.fill();
+    }
+    const dust = ctx.createLinearGradient(0, -height * .055, 0, height * .075);
+    dust.addColorStop(0, "rgba(1,4,11,0)");
+    dust.addColorStop(.45, "rgba(1,4,10,.42)");
+    dust.addColorStop(.58, "rgba(4,7,14,.3)");
+    dust.addColorStop(1, "rgba(1,4,11,0)");
+    ctx.fillStyle = dust;
+    ctx.fillRect(-width * 1.2, -height * .08, width * 2.4, height * .16);
+    ctx.restore();
     for (const star of state.stars) {
-      const parallaxX = ((-state.camera.x * state.camera.zoom * .012) % width + width) % width;
-      const parallaxY = ((-state.camera.y * state.camera.zoom * .012) % height + height) % height;
-      const x = (star.x + parallaxX) % width;
-      const y = (star.y + parallaxY) % height;
+      const starParallaxX = ((-state.camera.x * state.camera.zoom * .012) % width + width) % width;
+      const starParallaxY = ((-state.camera.y * state.camera.zoom * .012) % height + height) % height;
+      const x = (star.x + starParallaxX) % width;
+      const y = (star.y + starParallaxY) % height;
       ctx.fillStyle = star.blue ? `rgba(143,190,255,${star.alpha})` : `rgba(255,255,255,${star.alpha})`;
       ctx.beginPath();
       ctx.arc(x, y, star.radius, 0, Math.PI * 2);
@@ -963,12 +1057,37 @@
     ctx.beginPath(); ctx.arc(state.pointer.x, state.pointer.y, 3, 0, Math.PI * 2); ctx.fill();
   }
 
+  function drawMoveGuide() {
+    const body = state.bodies.find((candidate) => candidate.id === state.grabbedBodyId);
+    if (!body) return;
+    const point = worldToScreen(body.x, body.y);
+    const radius = visualRadius(body);
+    const parent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
+    ctx.save();
+    ctx.strokeStyle = "rgba(107,197,255,.9)";
+    ctx.fillStyle = "rgba(181,225,255,.95)";
+    ctx.lineWidth = 1.3;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath(); ctx.arc(point.x, point.y, radius + 13, 0, Math.PI * 2); ctx.stroke();
+    if (parent && !state.grabbedGroupIds.includes(parent.id)) {
+      const parentPoint = worldToScreen(parent.x, parent.y);
+      ctx.strokeStyle = "rgba(113,169,237,.42)";
+      ctx.beginPath(); ctx.moveTo(parentPoint.x, parentPoint.y); ctx.lineTo(point.x, point.y); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.font = "600 10px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("VELOCITY PRESERVED", point.x, point.y - radius - 22);
+    ctx.restore();
+  }
+
   function render() {
     drawBackground();
     drawGrid();
     drawOrbitGuides();
     drawTrails();
     [...state.bodies].sort((a, b) => a.mass - b.mass).forEach(drawBody);
+    drawMoveGuide();
     drawLabels();
     drawEffects();
     drawLaunchPreview();
@@ -1018,8 +1137,8 @@
     ui.bodyColor.value = normalizeHex(body.color);
     ui.bodyVelocityX.value = formatNumber(body.vx, 8);
     ui.bodyVelocityY.value = formatNumber(body.vy, 8);
-    ui.gravityScale.value = Math.round(body.gravityScale * 100);
-    ui.gravityScaleValue.value = `${body.gravityScale.toFixed(2)}×`;
+    ui.gravityScale.value = Math.round(Math.sqrt(body.gravityScale) * 100);
+    ui.gravityScaleValue.value = `${formatNumber(body.gravityScale, 2)}×`;
     const science = scienceByName[body.name] || body.science || scienceByType[body.scienceType] || scienceByType.rock;
     ui.bodyClass.textContent = science.className;
     ui.bodySummary.textContent = science.summary;
@@ -1093,7 +1212,7 @@
     const vy = body.vy - parent.vy;
     const distance = Math.hypot(x, y);
     if (distance <= 0) return null;
-    const mu = G * (gravitationalMass(body) + gravitationalMass(parent));
+    const mu = G * pairGravityMass(body, parent);
     const speedSq = vx * vx + vy * vy;
     const energy = speedSq / 2 - mu / distance;
     if (energy >= 0) return null;
@@ -1105,6 +1224,36 @@
     const angle = e > 1e-5 ? Math.atan2(eY, eX) : body.orbit?.angle || Math.atan2(y, x);
     const direction = x * vy - y * vx >= 0 ? 1 : -1;
     return { parentId: parent.id, a, e, angle, direction };
+  }
+
+  function stableBoundOrbit(body, parent) {
+    const orbit = osculatingOrbit(body, parent);
+    if (!orbit || !Number.isFinite(orbit.a) || orbit.e >= 1) return null;
+    if (parent.texture === "sun" && !parent.parentId) return orbit;
+    const stableRadius = hillRadius(parent) * .48;
+    return orbit.a * (1 + orbit.e) < stableRadius ? orbit : null;
+  }
+
+  function refreshOrbitalRelationships() {
+    for (const body of state.bodies) {
+      if (body.texture === "sun" || body.mass <= 0) continue;
+      const currentParent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
+      const currentOrbit = currentParent ? stableBoundOrbit(body, currentParent) : null;
+      if (currentOrbit) {
+        body.orbit = currentOrbit;
+        continue;
+      }
+      let best = null;
+      for (const candidate of state.bodies) {
+        if (candidate.id === body.id || candidate.mass <= body.mass) continue;
+        const orbit = stableBoundOrbit(body, candidate);
+        if (!orbit) continue;
+        const score = orbit.a / Math.max(hillRadius(candidate), 1e-12);
+        if (!best || score < best.score) best = { candidate, orbit, score };
+      }
+      body.parentId = best?.candidate.id ?? null;
+      body.orbit = best?.orbit ?? null;
+    }
   }
 
   function hillRadius(body) {
@@ -1203,7 +1352,9 @@
     const semiMajor = state.orbitDistance / Math.max(.05, 1 - eccentricity);
     const direction = ui.orbitDirection.value === "retrograde" ? -1 : 1;
     const bodyMass = spec.mass / EARTHS_PER_SUN;
-    const speed = Math.sqrt(G * (gravitationalMass(target) + bodyMass) * (2 / state.orbitDistance - 1 / semiMajor));
+    const spawnGravityScale = clamp(spec.gravityScale ?? 1, 0, 100);
+    const effectivePairMass = (target.gravityScale ?? 1) * spawnGravityScale * (target.mass + bodyMass);
+    const speed = Math.sqrt(G * effectivePairMass * (2 / state.orbitDistance - 1 / semiMajor));
     const cos = Math.cos(state.orbitAngle);
     const sin = Math.sin(state.orbitAngle);
     const body = makeBody({
@@ -1219,7 +1370,7 @@
     state.bodies.push(body);
     state.orbitPlacement = false;
     state.running = state.resumeAfterOrbit;
-    ui.modeHint.hidden = true;
+    updateInteractionHint();
     selectBody(body);
     renderSystemRoster();
     toast(`${body.name} placed in orbit around ${target.name}`);
@@ -1228,11 +1379,12 @@
   function cancelOrbitPlacement() {
     state.orbitPlacement = false;
     state.running = state.resumeAfterOrbit;
-    ui.modeHint.hidden = true;
+    updateInteractionHint();
   }
 
   function openLauncher() {
     if (state.orbitPlacement) cancelOrbitPlacement();
+    toggleMoveMode(false);
     ui.controlPanel.classList.remove("open");
     ui.mobilePanelButton.setAttribute("aria-label", "Open settings");
     state.launchTargetId = selectedBody()?.id || null;
@@ -1293,7 +1445,9 @@
       : clamp(targetHillRadius * .01, minimumDistance, 1);
     const x = target.x + Math.cos(angle) * distance;
     const y = target.y + Math.sin(angle) * distance;
-    const escapeSpeed = Math.sqrt(2 * G * (gravitationalMass(target) + spec.mass / EARTHS_PER_SUN) / distance);
+    const spawnMass = spec.mass / EARTHS_PER_SUN;
+    const spawnGravityScale = clamp(spec.gravityScale ?? 1, 0, 100);
+    const escapeSpeed = Math.sqrt(2 * G * (target.gravityScale ?? 1) * spawnGravityScale * (target.mass + spawnMass) / distance);
     const speed = escapeSpeed * [.55, .9, 1.4][Number(ui.impactSpeed.value) - 1];
     const body = makeBody({
       ...spec,
@@ -1311,10 +1465,109 @@
 
   function toggleAddMode(force) {
     state.addMode = force ?? !state.addMode;
+    if (state.addMode) toggleMoveMode(false);
     state.launchStart = null;
     canvas.classList.toggle("adding", state.addMode);
     ui.addBody.classList.toggle("active", state.addMode);
-    ui.modeHint.hidden = !state.addMode;
+    updateInteractionHint();
+  }
+
+  function updateInteractionHint() {
+    if (state.orbitPlacement) return;
+    if (state.moveMode) {
+      const body = state.bodies.find((candidate) => candidate.id === state.grabbedBodyId);
+      ui.modeHint.textContent = body
+        ? `Moving ${body.name} and its moons · Release to keep the new position`
+        : "Move Bodies · Drag a planet, moon, or star · Press T or Esc to exit";
+      ui.modeHint.hidden = false;
+    } else if (state.addMode) {
+      ui.modeHint.textContent = "Drag in space to launch a new body · Esc to cancel";
+      ui.modeHint.hidden = false;
+    } else {
+      ui.modeHint.hidden = true;
+    }
+  }
+
+  function toggleMoveMode(force) {
+    const enabled = force ?? !state.moveMode;
+    if (!enabled && state.grabbedBodyId != null) finishBodyDrag();
+    state.moveMode = enabled;
+    if (enabled) {
+      state.addMode = false;
+      state.launchStart = null;
+      canvas.classList.remove("adding");
+      ui.addBody.classList.remove("active");
+      if (state.orbitPlacement) cancelOrbitPlacement();
+    }
+    canvas.classList.toggle("move-bodies", enabled);
+    ui.moveBodyMode.classList.toggle("active", enabled);
+    ui.moveBodyMode.setAttribute("aria-pressed", String(enabled));
+    updateInteractionHint();
+    if (enabled) toast("Move Bodies enabled — drag any body");
+  }
+
+  function bodyGroupIds(rootId) {
+    const ids = new Set([rootId]);
+    let added = true;
+    while (added) {
+      added = false;
+      for (const body of state.bodies) {
+        if (body.parentId && ids.has(body.parentId) && !ids.has(body.id)) {
+          ids.add(body.id);
+          added = true;
+        }
+      }
+    }
+    return [...ids];
+  }
+
+  function beginBodyDrag(body, screenX, screenY) {
+    const point = screenToWorld(screenX, screenY);
+    state.grabbedBodyId = body.id;
+    state.grabbedGroupIds = bodyGroupIds(body.id);
+    state.grabOffsetX = body.x - point.x;
+    state.grabOffsetY = body.y - point.y;
+    state.resumeAfterMove = state.running;
+    state.running = false;
+    state.pointer.dragging = true;
+    state.pointer.moved = false;
+    selectBody(body);
+    canvas.classList.add("grabbing-body");
+    updateInteractionHint();
+  }
+
+  function moveGrabbedBody(screenX, screenY) {
+    const body = state.bodies.find((candidate) => candidate.id === state.grabbedBodyId);
+    if (!body) return;
+    const point = screenToWorld(screenX, screenY);
+    const nextX = point.x + state.grabOffsetX;
+    const nextY = point.y + state.grabOffsetY;
+    const dx = nextX - body.x;
+    const dy = nextY - body.y;
+    for (const member of state.bodies) {
+      if (!state.grabbedGroupIds.includes(member.id)) continue;
+      member.x += dx;
+      member.y += dy;
+      member.prevX = member.x;
+      member.prevY = member.y;
+      member.trail = [];
+    }
+  }
+
+  function finishBodyDrag() {
+    const body = state.bodies.find((candidate) => candidate.id === state.grabbedBodyId);
+    state.grabbedBodyId = null;
+    state.grabbedGroupIds = [];
+    state.pointer.dragging = false;
+    state.running = state.resumeAfterMove;
+    canvas.classList.remove("grabbing-body");
+    if (body) {
+      const parent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
+      body.orbit = parent ? osculatingOrbit(body, parent) : null;
+      refreshOrbitalRelationships();
+      toast(`${body.name} moved — velocity preserved`);
+    }
+    updateInteractionHint();
   }
 
   function createLaunchedBody(start, end) {
@@ -1346,6 +1599,15 @@
         state.pointer.y = event.offsetY;
         return;
       }
+      if (state.moveMode) {
+        const body = bodyAt(event.offsetX, event.offsetY);
+        if (body) {
+          state.pointer.downX = state.pointer.x = event.offsetX;
+          state.pointer.downY = state.pointer.y = event.offsetY;
+          beginBodyDrag(body, event.offsetX, event.offsetY);
+          return;
+        }
+      }
       state.pointer.downX = state.pointer.x = event.offsetX;
       state.pointer.downY = state.pointer.y = event.offsetY;
       state.pointer.dragging = true;
@@ -1361,6 +1623,13 @@
         state.pointer.x = event.offsetX;
         state.pointer.y = event.offsetY;
         updateOrbitPlacement(event.offsetX, event.offsetY);
+        return;
+      }
+      if (state.grabbedBodyId != null) {
+        state.pointer.x = event.offsetX;
+        state.pointer.y = event.offsetY;
+        state.pointer.moved = true;
+        moveGrabbedBody(event.offsetX, event.offsetY);
         return;
       }
       const dx = event.offsetX - state.pointer.x;
@@ -1380,6 +1649,11 @@
         createOrbitalBody();
         return;
       }
+      if (state.grabbedBodyId != null) {
+        moveGrabbedBody(event.offsetX, event.offsetY);
+        finishBodyDrag();
+        return;
+      }
       if (state.addMode && state.launchStart) {
         createLaunchedBody(state.launchStart, screenToWorld(event.offsetX, event.offsetY));
       } else if (!state.pointer.moved) {
@@ -1390,6 +1664,7 @@
       canvas.classList.remove("dragging");
     });
     canvas.addEventListener("pointercancel", () => {
+      if (state.grabbedBodyId != null) finishBodyDrag();
       state.pointer.dragging = false;
       state.launchStart = null;
       canvas.classList.remove("dragging");
@@ -1409,9 +1684,10 @@
     ui.loadPreset.addEventListener("click", () => loadPreset(ui.presetSelect.value));
     ui.resetSimulation.addEventListener("click", restoreSnapshot);
     ui.clearSimulation.addEventListener("click", () => {
-      cancelOrbitPlacement(); state.bodies = []; state.effects = []; state.selectedId = null; state.simYears = 0; updateSelectionUI(); renderSystemRoster(); toast("Universe cleared");
+      cancelOrbitPlacement(); toggleMoveMode(false); state.bodies = []; state.effects = []; state.selectedId = null; state.simYears = 0; updateSelectionUI(); renderSystemRoster(); toast("Universe cleared");
     });
     ui.fitView.addEventListener("click", () => fitView());
+    ui.moveBodyMode.addEventListener("click", () => toggleMoveMode());
     ui.addBody.addEventListener("click", openLauncher);
     ui.newPlanetTop.addEventListener("click", openLauncher);
     ui.closeLauncher.addEventListener("click", closeLauncher);
@@ -1440,7 +1716,7 @@
     ui.gravityScale.addEventListener("input", () => {
       const body = selectedBody();
       if (!body) return;
-      body.gravityScale = Number(ui.gravityScale.value) / 100;
+      body.gravityScale = (Number(ui.gravityScale.value) / 100) ** 2;
       updateSelectionUI();
     });
     ui.trailLength.addEventListener("input", () => {
@@ -1493,9 +1769,11 @@
       if (["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
       if (event.code === "Space") { event.preventDefault(); state.running = !state.running; }
       if (event.key.toLowerCase() === "a") openLauncher();
+      if (event.key.toLowerCase() === "t") toggleMoveMode();
       if (event.key.toLowerCase() === "f") fitView();
       if (event.key === "Escape") {
         toggleAddMode(false);
+        toggleMoveMode(false);
         closeLauncher();
         cancelOrbitPlacement();
         ui.controlPanel.classList.remove("open");

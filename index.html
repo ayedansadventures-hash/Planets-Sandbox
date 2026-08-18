@@ -39,6 +39,7 @@
               <button id="resetSimulation"><span>↺</span> Reset</button>
               <button id="clearSimulation" class="danger-subtle"><span>×</span> Clear</button>
               <button id="fitView"><span>⌗</span> Fit view</button>
+              <button id="moveBodyMode" aria-pressed="false"><span>✥</span> Move bodies</button>
             </div>
           </section>
 
@@ -92,8 +93,8 @@
                 <label class="stacked-field">Velocity Y <small>AU/yr</small><input id="bodyVelocityY" type="number" step="any" /></label>
               </div>
               <div class="range-field">
-                <div class="range-label"><label for="gravityScale">This body's gravity strength</label><output id="gravityScaleValue">1.00×</output></div>
-                <input id="gravityScale" type="range" min="0" max="200" value="100" />
+                <div class="range-label"><label for="gravityScale">This body's gravity strength <small>0–100×</small></label><output id="gravityScaleValue">1.00×</output></div>
+                <input id="gravityScale" type="range" min="0" max="1000" value="100" />
               </div>
               <div class="field-row editor-actions">
                 <button id="focusBody">Focus camera</button>
@@ -136,7 +137,7 @@
         <div class="scale-indicator"><span id="scaleBar"></span><label id="scaleLabel">1 AU</label></div>
         <div class="mode-hint" id="modeHint" hidden>Choose an object and target from the New Planet menu · Esc to cancel</div>
         <div class="toast" id="toast" role="status"></div>
-        <div class="canvas-credit">Drag to move · Scroll to zoom · Click a body to edit</div>
+        <div class="canvas-credit">Bodies enlarged for selection · physics uses true distances · Drag to move · Scroll to zoom</div>
 
         <aside class="launch-panel" id="launchPanel" aria-label="New planet launcher" aria-hidden="true" inert>
           <div class="launch-header">
@@ -182,6 +183,7 @@
         <div><kbd>Double-click</kbd><span>Focus a body</span></div>
         <div><kbd>Space</kbd><span>Pause or continue time</span></div>
         <div><kbd>A</kbd><span>Open the New Planet menu</span></div>
+        <div><kbd>T</kbd><span>Toggle Move Bodies, then drag a body</span></div>
         <div><kbd>F</kbd><span>Fit the entire system</span></div>
         <div><kbd>Esc</kbd><span>Cancel the current action</span></div>
       </div>

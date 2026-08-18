@@ -16,11 +16,12 @@ Then visit `http://127.0.0.1:4173`.
 
 ## Features
 
-- Pairwise N-body gravity: every planet, moon, star, and spawned object attracts every other body
+- Momentum-conserving pairwise N-body gravity: every interaction applies equal-and-opposite forces
 - Solar System with eight planets, realistic planetary eccentricities, and 21 major moons (Mercury and Venus have no natural moons)
 - Solar System, Earth and Moon, binary-star, and five-body-chaos presets
 - Pause, resume, reset, clear, and time-speed controls
-- Per-body gravity strength: select any planet, moon, star, or spawned object and change only that body's gravitational pull
+- Per-body gravity strength from 0× to 100× with adaptive close-encounter timesteps
+- Barycentric Solar System initialization, including the Sun's Jupiter-driven motion around the system center of mass
 - Merge, bounce, or pass-through collision behavior
 - A New Planet launcher with asteroid, gas-giant, terrestrial, and hot-planet types
 - Impact and orbit modes with a live system roster for choosing the target body
@@ -31,8 +32,10 @@ Then visit `http://127.0.0.1:4173`.
 - Editable mass, color, name, and velocity for selected bodies
 - Camera panning, pointer-centered zooming, focus, and fit-to-system controls
 - Fast pointer-centered manual zoom; creating an impact or orbit never moves or zooms the camera automatically
+- Move Bodies mode: press `T`, then drag any planet, moon, or star while preserving its velocity; attached moons move with their parent
 - Configurable trails, labels, grid, and velocity vectors
 - Distinct procedural planet surfaces with Earth continents and clouds, Mars terrain and a thin atmosphere, Mercury craters, Venusian clouds, gas-giant bands, ice-giant storms, rings, and solar glow
+- Procedural Milky Way background with a luminous galactic band, dust lane, and clustered stars
 - Responsive settings drawer for smaller screens
 - Keyboard shortcuts available from the in-game help panel
 
@@ -43,9 +46,10 @@ Then visit `http://127.0.0.1:4173`.
 - Click a body to select and edit it
 - Double-click a body to focus it
 - Press `A` to open the New Planet launcher
+- Press `T` to toggle Move Bodies, then drag a body to reposition it
 - Press `Space` to pause or resume
 - Press `F` to fit the system in view
-- Press `Esc` to cancel add-body mode
+- Press `Esc` to cancel the current tool or action
 
 ## Publish an update
 
@@ -74,3 +78,5 @@ The included artwork features the Sun, eight major planets, orbital paths, an as
 ## Simulation scope
 
 The physics model is two-dimensional, so orbital inclination and three-dimensional axial tilt are not simulated. The built-in system includes the major moons used for gameplay rather than every known minor satellite. Close-orbit accuracy is prioritized automatically; at very high requested speeds the game slows simulated-time throughput instead of taking unstable oversized physics steps.
+
+Planet graphics are deliberately enlarged so they remain clickable; gravitational calculations use their true positions and physical radii. A visually close pass can therefore still be millions of kilometres away. The simulator does not fake capture: a flyby becomes a permanent orbit only when a collision, tidal event, or multi-body encounter removes enough orbital energy.

@@ -42,6 +42,7 @@ button span { color: var(--blue); font-size: 17px; vertical-align: -1px; }
 .danger-button { color: #ffb4bb; border-color: rgba(255, 106, 119, .25); }
 .danger-subtle span { color: var(--danger); }
 .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.button-grid button.active { color: #cfe5ff; border-color: rgba(102, 175, 255, .65); background: #173052; box-shadow: inset 0 0 18px rgba(73, 143, 232, .14); }
 .field-row { display: flex; gap: 9px; align-items: flex-end; }
 .preset-row select { flex: 1; }
 .grow { flex: 1; min-width: 0; }
@@ -92,6 +93,8 @@ input[type="color"] { width: 100%; height: 36px; padding: 3px; border: 1px solid
 #spaceCanvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
 #spaceCanvas.dragging { cursor: grabbing; }
 #spaceCanvas.adding { cursor: crosshair; }
+#spaceCanvas.move-bodies { cursor: grab; }
+#spaceCanvas.grabbing-body { cursor: grabbing; }
 .top-hud { position: absolute; z-index: 5; top: 18px; left: 20px; right: 20px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
 .new-planet-top { height: 44px; min-width: 128px; color: #07101d; font-weight: 800; border: 0; background: linear-gradient(135deg, #72b9ff, #67ded9); pointer-events: auto; }
 .new-planet-top:hover { color: #07101d; background: linear-gradient(135deg, #8dc8ff, #82e8e4); }
