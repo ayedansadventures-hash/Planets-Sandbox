@@ -28,6 +28,7 @@
     showVelocity: false,
     showOrbits: true,
     camera: { x: 0, y: 0, zoom: 30 },
+    followBodyId: null,
     pointer: { x: 0, y: 0, downX: 0, downY: 0, worldX: 0, worldY: 0, dragging: false, moved: false },
     addMode: false,
     moveMode: false,
@@ -193,6 +194,7 @@
       tidalStress: clamp(data.tidalStress ?? 0, 0, 1),
       tidalPrimaryId: data.tidalPrimaryId ?? null,
       binaryPartnerId: data.binaryPartnerId ?? null,
+      displayAngle: Number.isFinite(data.displayAngle) ? data.displayAngle : null,
       orbit: data.orbit ? { ...data.orbit } : null,
       trail: [],
     };
@@ -281,6 +283,7 @@
     state.idCounter = 1;
     state.simYears = 0;
     state.selectedId = null;
+    state.followBodyId = null;
     state.launchTargetId = null;
     state.orbitPlacement = false;
     state.effects = [];
@@ -349,6 +352,7 @@
     state.idCounter = Math.max(1, ...state.bodies.map((b) => b.id + 1));
     state.simYears = 0;
     state.selectedId = null;
+    state.followBodyId = null;
     state.launchTargetId = null;
     state.orbitPlacement = false;
     state.effects = [];
@@ -505,6 +509,7 @@
         survivor.name = `${survivor.name} + ${survivor === a ? b.name : a.name}`.slice(0, 24);
         survivor.trail = [];
         if (state.selectedId === vulnerable.id) state.selectedId = survivor.id;
+        if (state.followBodyId === vulnerable.id) state.followBodyId = survivor.id;
         state.bodies.splice(state.bodies.indexOf(vulnerable), 1);
         updateSelectionUI();
         renderSystemRoster();
@@ -621,6 +626,7 @@
         spawnImpactEffect(primary, vulnerable, vulnerable.x, vulnerable.y);
         state.bodies.splice(state.bodies.indexOf(vulnerable), 1, ...fragments);
         if (state.selectedId === vulnerable.id) state.selectedId = fragments[0].id;
+        if (state.followBodyId === vulnerable.id) state.followBodyId = fragments[0].id;
         updateSelectionUI();
         renderSystemRoster();
         toast(`${vulnerable.name} was tidally shredded — ${primary.name}'s rings grew`);
@@ -773,10 +779,23 @@
     const physical = body.collisionRadius * state.camera.zoom;
     const massEarths = body.mass * EARTHS_PER_SUN;
     const moonRadiusKm = body.collisionRadius * KM_PER_AU;
-    const moonMinimum = clamp(4.5 + Math.log10(Math.max(2, moonRadiusKm)) * 1.65, 5, 10.5);
-    const planetMinimum = clamp(9 + Math.log10(Math.max(.02, massEarths) + 1) * 3.4, 9, 24);
-    const minimum = body.isMoon ? moonMinimum : massEarths > 10000 ? 24 : planetMinimum;
-    return Math.max(minimum, Math.min(120, physical));
+    const moonMinimum = clamp(3.2 + Math.log10(Math.max(2, moonRadiusKm)) * 1.25, 3.8, 7.6);
+    const planetMinimum = clamp(7.5 + Math.log10(Math.max(.02, massEarths) + 1) * 2.8, 7.5, 19);
+    const minimum = body.isMoon ? moonMinimum : massEarths > 10000 ? 20 : planetMinimum;
+    return Math.max(minimum, Math.min(96, physical));
+  }
+
+  function updateVisualMoonAngles(realSeconds) {
+    const maximumTurn = realSeconds * .62;
+    for (const body of state.bodies) {
+      if (!body.isMoon) continue;
+      const parent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
+      if (!parent) continue;
+      const targetAngle = Math.atan2(body.y - parent.y, body.x - parent.x);
+      if (!Number.isFinite(body.displayAngle)) body.displayAngle = targetAngle;
+      const difference = Math.atan2(Math.sin(targetAngle - body.displayAngle), Math.cos(targetAngle - body.displayAngle));
+      body.displayAngle += clamp(difference, -maximumTurn, maximumTurn);
+    }
   }
 
   function bodyDisplayPoint(body) {
@@ -794,7 +813,7 @@
     const rank = Math.max(0, siblings.findIndex((candidate) => candidate.id === body.id));
     const readableDistance = visualRadius(parent) + visualRadius(body) + 10 + rank * 7;
     if (actualDistance >= readableDistance) return physical;
-    const angle = actualDistance > .001 ? Math.atan2(dy, dx) : body.id * 2.399;
+    const angle = Number.isFinite(body.displayAngle) ? body.displayAngle : actualDistance > .001 ? Math.atan2(dy, dx) : body.id * 2.399;
     return {
       x: parentPoint.x + Math.cos(angle) * readableDistance,
       y: parentPoint.y + Math.sin(angle) * readableDistance,
@@ -1314,7 +1333,15 @@
     state.lastFrame = now;
     state.fps += ((1 / Math.max(elapsed, .001)) - state.fps) * .06;
     updateSimulation(elapsed);
+    updateVisualMoonAngles(elapsed);
     updateEffects(elapsed);
+    const followedBody = state.bodies.find((body) => body.id === state.followBodyId);
+    if (followedBody) {
+      state.camera.x = followedBody.x;
+      state.camera.y = followedBody.y;
+    } else if (state.followBodyId != null) {
+      state.followBodyId = null;
+    }
     render();
     updateHUD();
     requestAnimationFrame(frame);
@@ -1408,6 +1435,7 @@
   }
 
   function fitView(silent = false) {
+    state.followBodyId = null;
     if (!state.bodies.length) { state.camera = { x: 0, y: 0, zoom: 30 }; return; }
     const xs = state.bodies.map((b) => b.x);
     const ys = state.bodies.map((b) => b.y);
@@ -1422,6 +1450,7 @@
 
   function focusBody(body = selectedBody()) {
     if (!body) return;
+    state.followBodyId = body.id;
     state.camera.x = body.x;
     state.camera.y = body.y;
     const children = state.bodies.filter((candidate) => candidate.parentId === body.id);
@@ -1431,7 +1460,7 @@
     } else {
       state.camera.zoom = clamp(Math.max(state.camera.zoom, 32 / body.collisionRadius), 90, 250000);
     }
-    toast(`Focused on ${body.name}`);
+    toast(`Camera now following ${body.name}`);
   }
 
   function currentSpawnSpec() {
@@ -1915,6 +1944,7 @@
       if (!state.pointer.dragging) return;
       if (Math.hypot(event.offsetX - state.pointer.downX, event.offsetY - state.pointer.downY) > 3) state.pointer.moved = true;
       if (!state.addMode) {
+        state.followBodyId = null;
         state.camera.x -= dx / state.camera.zoom;
         state.camera.y -= dy / state.camera.zoom;
       }
@@ -2041,6 +2071,7 @@
       const body = selectedBody();
       if (!body) return;
       state.bodies = state.bodies.filter((item) => item.id !== body.id);
+      if (state.followBodyId === body.id) state.followBodyId = null;
       state.selectedId = null;
       updateSelectionUI();
       renderSystemRoster();
