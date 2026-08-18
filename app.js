@@ -12,6 +12,28 @@
   const canvas = document.querySelector("#spaceCanvas");
   const ctx = canvas.getContext("2d", { alpha: false });
 
+  // Official NASA/JPL imagery is loaded once and reused like a game texture atlas.
+  const nasaTextureSettings = {
+    mercury: { src: "assets/nasa/mercury.jpg", crop: .83, cx: .5, cy: .5 },
+    venus: { src: "assets/nasa/venus.jpg", crop: .84, cx: .5, cy: .5 },
+    earth: { src: "assets/nasa/earth.jpg", crop: .81, cx: .5, cy: .5 },
+    mars: { src: "assets/nasa/mars.jpg", crop: .83, cx: .5, cy: .5 },
+    jupiter: { src: "assets/nasa/jupiter.jpg", crop: .94, cx: .5, cy: .5 },
+    saturn: { src: "assets/nasa/saturn.jpg", crop: .59, cx: .55, cy: .46 },
+    uranus: { src: "assets/nasa/uranus.jpg", crop: .82, cx: .5, cy: .5 },
+    neptune: { src: "assets/nasa/neptune.jpg", crop: .82, cx: .5, cy: .5 },
+    sun: { src: "assets/nasa/sun.jpg", crop: .96, cx: .5, cy: .5 },
+  };
+  const nasaTextures = Object.fromEntries(Object.entries(nasaTextureSettings).map(([name, settings]) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = settings.src;
+    return [name, image];
+  }));
+  const milkyWayPhoto = new Image();
+  milkyWayPhoto.decoding = "async";
+  milkyWayPhoto.src = "assets/nasa/milky-way-1920.jpg";
+
   const ui = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
   const state = {
     bodies: [],
@@ -713,31 +735,46 @@
     ctx.fillRect(0, 0, width, height);
     const parallaxX = Math.sin(state.camera.x * .07) * width * .04;
     const parallaxY = Math.sin(state.camera.y * .07) * height * .035;
-    ctx.save();
-    ctx.translate(width * .5 + parallaxX, height * .48 + parallaxY);
-    ctx.rotate(-.27);
-    const galaxyGlow = ctx.createLinearGradient(0, -height * .3, 0, height * .3);
-    galaxyGlow.addColorStop(0, "rgba(28,54,102,0)");
-    galaxyGlow.addColorStop(.25, "rgba(63,91,151,.08)");
-    galaxyGlow.addColorStop(.44, "rgba(170,183,216,.15)");
-    galaxyGlow.addColorStop(.5, "rgba(224,215,197,.19)");
-    galaxyGlow.addColorStop(.58, "rgba(117,137,185,.13)");
-    galaxyGlow.addColorStop(.78, "rgba(45,72,129,.06)");
-    galaxyGlow.addColorStop(1, "rgba(18,38,78,0)");
-    ctx.fillStyle = galaxyGlow;
-    ctx.fillRect(-width * 1.2, -height * .32, width * 2.4, height * .64);
-    for (const star of state.milkyWay) {
-      ctx.fillStyle = star.warm ? `rgba(255,221,176,${star.alpha})` : `rgba(191,214,255,${star.alpha})`;
-      ctx.beginPath(); ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2); ctx.fill();
+    const hasMilkyWayPhoto = milkyWayPhoto.complete && milkyWayPhoto.naturalWidth > 0;
+    if (hasMilkyWayPhoto) {
+      const viewRatio = width / height;
+      // Zoom into the useful star field and leave the source map's printed border offscreen.
+      const sourceHeight = milkyWayPhoto.naturalHeight * .56;
+      const sourceWidth = Math.min(milkyWayPhoto.naturalWidth, sourceHeight * viewRatio);
+      const travelX = Math.max(0, milkyWayPhoto.naturalWidth - sourceWidth);
+      const travelY = Math.max(0, milkyWayPhoto.naturalHeight - sourceHeight);
+      const sourceX = travelX * (.5 + Math.sin(state.camera.x * .025) * .08);
+      const sourceY = travelY * (.46 + Math.sin(state.camera.y * .025) * .06);
+      ctx.save();
+      ctx.globalAlpha = .42;
+      ctx.drawImage(milkyWayPhoto, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+      ctx.restore();
+      const photoShade = ctx.createRadialGradient(width * .55, height * .42, 0, width * .55, height * .42, Math.max(width, height) * .78);
+      photoShade.addColorStop(0, "rgba(3,10,24,.1)");
+      photoShade.addColorStop(.55, "rgba(1,5,14,.36)");
+      photoShade.addColorStop(1, "rgba(0,2,8,.82)");
+      ctx.fillStyle = photoShade;
+      ctx.fillRect(0, 0, width, height);
+    } else {
+      ctx.save();
+      ctx.translate(width * .5 + parallaxX, height * .48 + parallaxY);
+      ctx.rotate(-.27);
+      const galaxyGlow = ctx.createLinearGradient(0, -height * .3, 0, height * .3);
+      galaxyGlow.addColorStop(0, "rgba(28,54,102,0)");
+      galaxyGlow.addColorStop(.25, "rgba(63,91,151,.08)");
+      galaxyGlow.addColorStop(.44, "rgba(170,183,216,.15)");
+      galaxyGlow.addColorStop(.5, "rgba(224,215,197,.19)");
+      galaxyGlow.addColorStop(.58, "rgba(117,137,185,.13)");
+      galaxyGlow.addColorStop(.78, "rgba(45,72,129,.06)");
+      galaxyGlow.addColorStop(1, "rgba(18,38,78,0)");
+      ctx.fillStyle = galaxyGlow;
+      ctx.fillRect(-width * 1.2, -height * .32, width * 2.4, height * .64);
+      for (const star of state.milkyWay) {
+        ctx.fillStyle = star.warm ? `rgba(255,221,176,${star.alpha})` : `rgba(191,214,255,${star.alpha})`;
+        ctx.beginPath(); ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
     }
-    const dust = ctx.createLinearGradient(0, -height * .055, 0, height * .075);
-    dust.addColorStop(0, "rgba(1,4,11,0)");
-    dust.addColorStop(.45, "rgba(1,4,10,.42)");
-    dust.addColorStop(.58, "rgba(4,7,14,.3)");
-    dust.addColorStop(1, "rgba(1,4,11,0)");
-    ctx.fillStyle = dust;
-    ctx.fillRect(-width * 1.2, -height * .08, width * 2.4, height * .16);
-    ctx.restore();
     for (const star of state.stars) {
       const starParallaxX = ((-state.camera.x * state.camera.zoom * .012) % width + width) % width;
       const starParallaxY = ((-state.camera.y * state.camera.zoom * .012) % height + height) % height;
@@ -786,15 +823,24 @@
   }
 
   function updateVisualMoonAngles(realSeconds) {
-    const maximumTurn = realSeconds * .62;
     for (const body of state.bodies) {
       if (!body.isMoon) continue;
       const parent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
       if (!parent) continue;
       const targetAngle = Math.atan2(body.y - parent.y, body.x - parent.x);
       if (!Number.isFinite(body.displayAngle)) body.displayAngle = targetAngle;
-      const difference = Math.atan2(Math.sin(targetAngle - body.displayAngle), Math.cos(targetAngle - body.displayAngle));
-      body.displayAngle += clamp(difference, -maximumTurn, maximumTurn);
+      if (!state.running || state.speedDays <= 0) continue;
+      const relativeX = body.x - parent.x;
+      const relativeY = body.y - parent.y;
+      const relativeVelocityX = body.vx - parent.vx;
+      const relativeVelocityY = body.vy - parent.vy;
+      const angularMomentum = relativeX * relativeVelocityY - relativeY * relativeVelocityX;
+      const direction = body.orbit?.direction || (angularMomentum < 0 ? -1 : 1);
+      const semimajorAxis = body.orbit?.a || Math.hypot(relativeX, relativeY);
+      const periodDays = Math.sqrt(semimajorAxis ** 3 / Math.max(pairGravityMass(parent, body), 1e-15)) * 365.25;
+      const naturalDisplayRate = clamp(1.5 / Math.sqrt(Math.max(periodDays, .2)), .08, .7);
+      const speedBoost = clamp(Math.sqrt(state.speedDays / 10), .55, 1.8);
+      body.displayAngle += direction * Math.min(.8, naturalDisplayRate * speedBoost) * realSeconds;
     }
   }
 
@@ -1015,7 +1061,7 @@
     ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();
     ctx.save();
     ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.clip();
-    drawTexture(body, radius);
+    if (!drawNasaTexture(body, radius)) drawTexture(body, radius);
     ctx.restore();
     drawAtmosphere(body, radius);
     if (body.ring) drawRing(body, radius, false);
@@ -1032,6 +1078,33 @@
     ctx.restore();
 
     if (state.showVelocity) drawVelocity(body, p);
+  }
+
+  function drawNasaTexture(body, radius) {
+    const settings = nasaTextureSettings[body.texture];
+    const image = nasaTextures[body.texture];
+    if (!settings || !image?.complete || image.naturalWidth === 0 || radius < 5) return false;
+    const cropSize = Math.min(image.naturalWidth, image.naturalHeight) * settings.crop;
+    const sourceX = clamp(image.naturalWidth * settings.cx - cropSize / 2, 0, image.naturalWidth - cropSize);
+    const sourceY = clamp(image.naturalHeight * settings.cy - cropSize / 2, 0, image.naturalHeight - cropSize);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(image, sourceX, sourceY, cropSize, cropSize, -radius, -radius, radius * 2, radius * 2);
+    if (body.texture === "sun" && body.color.toLowerCase() !== "#ffbd55") {
+      ctx.save();
+      ctx.globalCompositeOperation = "color";
+      ctx.globalAlpha = .32;
+      ctx.fillStyle = body.color;
+      ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+      ctx.restore();
+    }
+    const limb = ctx.createRadialGradient(-radius * .3, -radius * .34, radius * .08, 0, 0, radius * 1.03);
+    limb.addColorStop(0, "rgba(255,255,255,.09)");
+    limb.addColorStop(.55, "rgba(0,0,0,0)");
+    limb.addColorStop(1, "rgba(0,2,8,.48)");
+    ctx.fillStyle = limb;
+    ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+    return true;
   }
 
   function drawLabels() {

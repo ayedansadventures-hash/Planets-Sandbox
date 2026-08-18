@@ -19,7 +19,7 @@ Then visit `http://127.0.0.1:4173`.
 - Momentum-conserving pairwise N-body gravity: every interaction applies equal-and-opposite forces
 - Solar System with eight planets, realistic planetary eccentricities, and 21 major moons (Mercury and Venus have no natural moons)
 - Readable close-moon rendering keeps moons visible beside their planets at system-wide zoom while physics retains true orbital distances
-- Smaller planet/moon visuals and smoothed close-moon animation prevent jitter around giant planets even at the full 333-days-per-second setting
+- Smaller planet/moon visuals and one-direction close-moon animation prevent high-speed wobble around giant planets even at the full 333-days-per-second setting
 - Solar System, Earth and Moon, binary-star, and five-body-chaos presets
 - Pause, resume, reset, clear, and time-speed controls
 - Per-body gravity strength from 0× to 100× with adaptive close-encounter timesteps
@@ -42,8 +42,8 @@ Then visit `http://127.0.0.1:4173`.
 - Fast pointer-centered manual zoom; creating an impact or orbit never moves or zooms the camera automatically
 - Move Bodies mode: press `T`, then drag any planet, moon, or star while preserving its velocity; attached moons move with their parent
 - Configurable trails, labels, grid, and velocity vectors
-- Distinct procedural planet surfaces with Earth continents and clouds, Mars terrain and a thin atmosphere, Mercury craters, Venusian clouds, gas-giant bands, ice-giant storms, rings, and solar glow
-- Procedural Milky Way background with a luminous galactic band, dust lane, and clustered stars
+- Optimized NASA/JPL planet and Sun imagery with procedural fallback surfaces, atmosphere glows, lighting, rings, and magnetic fields
+- Optimized NASA/JPL 2MASS Milky Way background with parallax stars, deep-space shading, and a futuristic HUD treatment
 - Responsive settings drawer for smaller screens
 - Keyboard shortcuts available from the in-game help panel
 
