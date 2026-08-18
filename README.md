@@ -23,11 +23,14 @@ Then visit `http://127.0.0.1:4173`.
 - Pause, resume, reset, clear, and time-speed controls
 - Per-body gravity strength from 0× to 100× with adaptive close-encounter timesteps
 - Barycentric Solar System initialization, including the Sun's Jupiter-driven motion around the system center of mass
-- Merge, bounce, or pass-through collision behavior
+- Automatic merge-on-impact collisions, except inside Roche zones where the smaller body is tidally shredded into debris
 - A New Planet launcher with asteroid, gas-giant, terrestrial, and hot-planet types
 - Impact and orbit modes with a live system roster for choosing the target body
+- Binary creation mode mass-matches a new companion and initializes both bodies around their shared barycenter
+- Automatic binary-planet, binary-moon, and binary-star classification with a live barycenter marker
+- Spawnable G-type, red-dwarf, blue main-sequence, red-giant, and white-dwarf stars
 - Mouse-controlled orbit distance, prograde/retrograde motion, and adjustable eccentricity (“Accentuary”) with periapsis/apoapsis previews
-- Hill-sphere stability and density-aware Roche-limit safeguards, plus physical tidal breakup into gravitating fragments
+- Enlarged, visible density-aware Roche zones with gradual tidal stretching, escaping shards, physical breakup into gravitating fragments, and debris-fed ring growth
 - Visible impact flashes, expanding shockwaves, rocky fragments, sparks, and gas clouds
 - Scientific profiles for every body, including composition, atmosphere, temperature, density, magnetic-field strength, surface gravity, and escape velocity
 - Editable mass, color, name, and velocity for selected bodies

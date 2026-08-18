@@ -56,6 +56,8 @@ select, input[type="text"], input[type="number"] { width: 100%; height: 36px; co
 .range-label output { color: #a9caff; font-variant-numeric: tabular-nums; }
 input[type="range"] { width: 100%; height: 3px; accent-color: #76adff; cursor: pointer; }
 .transport { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+.physics-note { margin: 12px 0 0; padding: 11px; color: #71839d; border: 1px solid rgba(126,166,222,.12); border-radius: 8px; background: rgba(10,20,35,.72); font-size: 10px; line-height: 1.5; }
+.physics-note strong { color: #aec8ea; }
 .transport .range-field { margin: 0; }
 .play-button { width: 42px; height: 42px; padding: 0; color: #06101e; font-weight: 900; border: 0; background: linear-gradient(135deg, #75b5ff, #65ddd9); }
 .toggle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 8px; margin-top: 17px; }
@@ -123,7 +125,7 @@ input[type="color"] { width: 100%; height: 36px; padding: 3px; border: 1px solid
 .launch-header { display: flex; align-items: flex-start; justify-content: space-between; }
 .launch-header h2 { margin: 0; font-size: 26px; letter-spacing: -.04em; }
 .launch-intro { margin: 12px 0 18px; color: #718198; font-size: 11px; line-height: 1.55; }
-.launch-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 14px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #070e19; }
+.launch-mode { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 14px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #070e19; }
 .launch-mode button { border-color: transparent; background: transparent; }
 .launch-mode button.active { color: #d8e8ff; border-color: rgba(105,168,255,.32); background: #14243a; }
 .launch-mode button span { margin-right: 4px; }
@@ -139,6 +141,9 @@ input[type="color"] { width: 100%; height: 36px; padding: 3px; border: 1px solid
 .gas-orb { color: #d49e62; background: repeating-linear-gradient(2deg, #e7c08e 0 5px, #9e6949 6px 9px); }
 .earth-orb { color: #4f9cff; background: radial-gradient(circle at 35% 30%, #9bcfff, #2875c4 43%, #184b34 47%, #082349); }
 .hot-orb { color: #ff7148; background: radial-gradient(circle at 30% 25%, #ffd36b, #e95031 45%, #5b1716 75%); }
+.star-orb { color: #ffd678; background: radial-gradient(circle at 35% 30%, #fffbd2, #ffc34f 38%, #f06c2d 70%, #732316); box-shadow: 0 0 18px currentColor; }
+.star-type-field { margin: 12px 0 2px; padding: 12px; border: 1px solid rgba(255,190,91,.16); border-radius: 9px; background: rgba(35,23,10,.35); }
+.star-type-field[hidden] { display: none; }
 .target-heading { display: flex; justify-content: space-between; align-items: flex-end; margin: 23px 0 10px; }
 .target-heading > div { display: flex; flex-direction: column; gap: 4px; }
 .target-heading strong { color: #b7c7dc; font-size: 11px; }

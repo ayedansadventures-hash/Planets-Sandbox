@@ -52,13 +52,7 @@
                 <input id="timeScale" type="range" min="0" max="100" value="49" />
               </div>
             </div>
-            <label class="stacked-field">Collision behavior
-              <select id="collisionMode">
-                <option value="merge">Merge on impact</option>
-                <option value="bounce">Elastic bounce</option>
-                <option value="none">Pass through</option>
-              </select>
-            </label>
+            <p class="physics-note"><strong>Collisions merge automatically.</strong> Objects inside a Roche limit are tidally shredded into ring-forming debris instead.</p>
           </section>
 
           <section class="control-section">
@@ -149,17 +143,28 @@
             <div><p class="eyebrow">OBJECT CREATOR</p><h2>New Planet</h2></div>
             <button id="closeLauncher" class="icon-button" aria-label="Close new planet menu">×</button>
           </div>
-          <p class="launch-intro">Choose an object, select the X target slot, then launch an impactor or place it in orbit.</p>
+          <p class="launch-intro">Choose an object, select the X target slot, then launch an impactor, place an orbit, or create a binary pair.</p>
           <div class="launch-mode" role="group" aria-label="Launch behavior">
             <button id="impactMode" class="active" aria-pressed="true"><span>➤</span> Impact</button>
             <button id="orbitMode" aria-pressed="false"><span>◉</span> Orbit</button>
+            <button id="binaryMode" aria-pressed="false"><span>∞</span> Binary</button>
           </div>
           <div class="spawn-types" id="spawnTypes">
             <label class="spawn-card"><input type="radio" name="spawnType" value="asteroid" checked /><span class="spawn-orb asteroid-orb"></span><strong>Asteroid</strong><small>Small, rocky, fast</small></label>
             <label class="spawn-card"><input type="radio" name="spawnType" value="gasGiant" /><span class="spawn-orb gas-orb"></span><strong>Gas giant</strong><small>Massive, hydrogen-rich</small></label>
             <label class="spawn-card"><input type="radio" name="spawnType" value="planet" /><span class="spawn-orb earth-orb"></span><strong>Normal planet</strong><small>Rocky, Earth-like</small></label>
             <label class="spawn-card"><input type="radio" name="spawnType" value="hotPlanet" /><span class="spawn-orb hot-orb"></span><strong>Hot planet</strong><small>Molten, high energy</small></label>
+            <label class="spawn-card"><input type="radio" name="spawnType" value="star" /><span class="spawn-orb star-orb"></span><strong>Sun or star</strong><small>Choose a stellar class</small></label>
           </div>
+          <label class="stacked-field star-type-field" id="starTypeField" hidden>Star type
+            <select id="starType">
+              <option value="gStar">G-type · Sun-like</option>
+              <option value="redDwarf">M-type · Red dwarf</option>
+              <option value="blueStar">B-type · Blue main sequence</option>
+              <option value="redGiant">Red giant</option>
+              <option value="whiteDwarf">White dwarf</option>
+            </select>
+          </label>
           <div class="target-heading"><div><small>X TARGET SLOT</small><strong>Orbit or impact this object</strong></div><span id="rosterCount">0 bodies</span></div>
           <div class="system-roster" id="systemRoster"></div>
           <div class="launch-options" id="impactOptions">
@@ -192,7 +197,7 @@
         <div><kbd>F</kbd><span>Fit the entire system</span></div>
         <div><kbd>Esc</kbd><span>Cancel the current action</span></div>
       </div>
-      <p class="dialog-note">Tip: choose a target in the New Planet menu and adjust impact speed before launching. The camera will follow the approach.</p>
+      <p class="dialog-note">Tip: New Planet supports impacts, normal orbits, and mass-matched binary systems. Hover a selected planet to reveal its Roche zone and magnetic field.</p>
     </dialog>
 
     <script src="app.js"></script>

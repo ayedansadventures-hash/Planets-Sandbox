@@ -7,6 +7,8 @@
   const KM_PER_AU = 149597870.7;
   const EARTH_RADIUS_AU = 6371 / KM_PER_AU;
   const MAX_BODIES = 80;
+  const ROCHE_GAMEPLAY_SCALE = 4;
+  const BINARY_MASS_RATIO = .25;
   const canvas = document.querySelector("#spaceCanvas");
   const ctx = canvas.getContext("2d", { alpha: false });
 
@@ -19,7 +21,6 @@
     running: true,
     simYears: 0,
     speedDays: 10,
-    collisionMode: "merge",
     trailLength: 180,
     showTrails: true,
     showLabels: true,
@@ -80,6 +81,15 @@
     gasGiant: { label: "Gas giant", mass: 180, radius: .12, collisionRadius: 60000 / KM_PER_AU, color: "#d19a68", texture: "jupiter", scienceType: "gasGiant", ring: true },
     planet: { label: "New planet", mass: 1, radius: .055, collisionRadius: EARTH_RADIUS_AU, color: "#4d9fe8", texture: "earth", scienceType: "planet" },
     hotPlanet: { label: "Hot planet", mass: 2.5, radius: .064, collisionRadius: 8500 / KM_PER_AU, color: "#f05b38", texture: "mars", scienceType: "hotPlanet" },
+    star: { label: "Star", mass: 332946, radius: .19, collisionRadius: 696340 / KM_PER_AU, color: "#ffb13b", texture: "sun", scienceType: "star" },
+  };
+
+  const starCatalog = {
+    gStar: { label: "G-type star", mass: 332946, radius: .19, collisionRadius: 696340 / KM_PER_AU, color: "#ffb13b" },
+    redDwarf: { label: "Red dwarf", mass: 66589, radius: .105, collisionRadius: 210000 / KM_PER_AU, color: "#e86845" },
+    blueStar: { label: "Blue main-sequence star", mass: 1997676, radius: .28, collisionRadius: 2437000 / KM_PER_AU, color: "#87bdff" },
+    redGiant: { label: "Red giant", mass: 499419, radius: .38, collisionRadius: 14000000 / KM_PER_AU, color: "#f07842" },
+    whiteDwarf: { label: "White dwarf", mass: 199768, radius: .075, collisionRadius: 8500 / KM_PER_AU, color: "#dcecff" },
   };
 
   const atmosphereStyles = {
@@ -174,11 +184,15 @@
       color: data.color || "#9cb8d8",
       texture: data.texture || "rock",
       ring: Boolean(data.ring),
+      ringScale: Math.max(1, data.ringScale ?? 1),
       scienceType: data.scienceType || (data.texture === "sun" ? "star" : data.texture === "ice" ? "ice" : "rock"),
       science: data.science || scienceByName[data.name] || null,
       parentId: data.parentId || null,
       isMoon: Boolean(data.isMoon),
       tidalImmune: Boolean(data.tidalImmune),
+      tidalStress: clamp(data.tidalStress ?? 0, 0, 1),
+      tidalPrimaryId: data.tidalPrimaryId ?? null,
+      binaryPartnerId: data.binaryPartnerId ?? null,
       orbit: data.orbit ? { ...data.orbit } : null,
       trail: [],
     };
@@ -428,8 +442,8 @@
       state.bodies[i].vx += nextAcceleration[i].x * dt * .5;
       state.bodies[i].vy += nextAcceleration[i].y * dt * .5;
     }
-    if (state.collisionMode !== "none") resolveCollisions();
-    resolveTidalDisruptions();
+    resolveCollisions();
+    resolveTidalDisruptions(dt);
   }
 
   function resolveCollisions() {
@@ -458,58 +472,44 @@
           : closestT;
         const firstName = a.name;
         const secondName = b.name;
-        spawnImpactEffect(a, b, (a.x + b.x) / 2, (a.y + b.y) / 2);
-        if (state.collisionMode === "merge") {
-          const totalMass = a.mass + b.mass;
-          const survivor = a.mass >= b.mass ? a : b;
-          const mergedGravityScale = (gravitationalMass(a) + gravitationalMass(b)) / totalMass;
-          survivor.x = (a.x * a.mass + b.x * b.mass) / totalMass;
-          survivor.y = (a.y * a.mass + b.y * b.mass) / totalMass;
-          survivor.vx = (a.vx * a.mass + b.vx * b.mass) / totalMass;
-          survivor.vy = (a.vy * a.mass + b.vy * b.mass) / totalMass;
-          survivor.mass = totalMass;
-          survivor.gravityScale = mergedGravityScale;
-          survivor.radius = Math.cbrt(a.radius ** 3 + b.radius ** 3);
-          survivor.collisionRadius = Math.cbrt(a.collisionRadius ** 3 + b.collisionRadius ** 3);
-          survivor.referenceMass = survivor.mass;
-          survivor.referenceRadius = survivor.radius;
-          survivor.referenceCollisionRadius = survivor.collisionRadius;
-          survivor.name = `${survivor.name} + ${survivor === a ? b.name : a.name}`.slice(0, 24);
-          survivor.trail = [];
-          const removed = survivor === a ? b : a;
-          if (state.selectedId === removed.id) state.selectedId = survivor.id;
-          state.bodies.splice(state.bodies.indexOf(removed), 1);
-          updateSelectionUI();
-          renderSystemRoster();
-          toast(`${firstName} and ${secondName} merged`);
+        const primary = a.mass >= b.mass ? a : b;
+        const vulnerable = primary === a ? b : a;
+        const primaryRoche = rocheLimit(primary, vulnerable.mass, vulnerable.collisionRadius, vulnerable.gravityScale);
+        const crossedRoche = Math.min(distance, Math.hypot(closestDx, closestDy)) < primaryRoche;
+        if (crossedRoche && !vulnerable.tidalImmune && primary.mass >= vulnerable.mass * 12) {
+          if (contactT < 1) {
+            a.x = (a.prevX ?? a.x) + (a.x - (a.prevX ?? a.x)) * contactT;
+            a.y = (a.prevY ?? a.y) + (a.y - (a.prevY ?? a.y)) * contactT;
+            b.x = (b.prevX ?? b.x) + (b.x - (b.prevX ?? b.x)) * contactT;
+            b.y = (b.prevY ?? b.y) + (b.y - (b.prevY ?? b.y)) * contactT;
+          }
+          vulnerable.tidalPrimaryId = primary.id;
+          vulnerable.tidalStress = 1;
           return;
         }
-        if (distance >= collisionDistance && contactT < 1) {
-          a.x = (a.prevX ?? a.x) + (a.x - (a.prevX ?? a.x)) * contactT;
-          a.y = (a.prevY ?? a.y) + (a.y - (a.prevY ?? a.y)) * contactT;
-          b.x = (b.prevX ?? b.x) + (b.x - (b.prevX ?? b.x)) * contactT;
-          b.y = (b.prevY ?? b.y) + (b.y - (b.prevY ?? b.y)) * contactT;
-          dx = b.x - a.x;
-          dy = b.y - a.y;
-          distance = Math.max(Math.hypot(dx, dy), collisionDistance * .999);
-        }
-        const nx = dx / Math.max(distance, 1e-12);
-        const ny = dy / Math.max(distance, 1e-12);
-        const relative = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-        if (relative < 0) {
-          const impulse = (2 * relative) / (a.mass + b.mass);
-          a.vx += impulse * b.mass * nx;
-          a.vy += impulse * b.mass * ny;
-          b.vx -= impulse * a.mass * nx;
-          b.vy -= impulse * a.mass * ny;
-        }
-        const overlap = Math.max(0, collisionDistance - distance);
+        spawnImpactEffect(a, b, (a.x + b.x) / 2, (a.y + b.y) / 2);
         const totalMass = a.mass + b.mass;
-        a.x -= nx * overlap * (b.mass / totalMass);
-        a.y -= ny * overlap * (b.mass / totalMass);
-        b.x += nx * overlap * (a.mass / totalMass);
-        b.y += ny * overlap * (a.mass / totalMass);
-        toast(`${firstName} and ${secondName} collided`);
+        const survivor = primary;
+        const mergedGravityScale = (gravitationalMass(a) + gravitationalMass(b)) / totalMass;
+        survivor.x = (a.x * a.mass + b.x * b.mass) / totalMass;
+        survivor.y = (a.y * a.mass + b.y * b.mass) / totalMass;
+        survivor.vx = (a.vx * a.mass + b.vx * b.mass) / totalMass;
+        survivor.vy = (a.vy * a.mass + b.vy * b.mass) / totalMass;
+        survivor.mass = totalMass;
+        survivor.gravityScale = mergedGravityScale;
+        survivor.radius = Math.cbrt(a.radius ** 3 + b.radius ** 3);
+        survivor.collisionRadius = Math.cbrt(a.collisionRadius ** 3 + b.collisionRadius ** 3);
+        survivor.referenceMass = survivor.mass;
+        survivor.referenceRadius = survivor.radius;
+        survivor.referenceCollisionRadius = survivor.collisionRadius;
+        survivor.name = `${survivor.name} + ${survivor === a ? b.name : a.name}`.slice(0, 24);
+        survivor.trail = [];
+        if (state.selectedId === vulnerable.id) state.selectedId = survivor.id;
+        state.bodies.splice(state.bodies.indexOf(vulnerable), 1);
+        updateSelectionUI();
+        renderSystemRoster();
+        toast(`${firstName} and ${secondName} merged`);
+        return;
       }
     }
   }
@@ -543,7 +543,14 @@
     if (state.effects.length > 320) state.effects.splice(0, state.effects.length - 320);
   }
 
-  function resolveTidalDisruptions() {
+  function resolveTidalDisruptions(dt) {
+    const elapsedDays = dt * 365.25;
+    for (const body of state.bodies) {
+      if (body.tidalImmune || !body.tidalStress) continue;
+      if (body.tidalStress >= 1) continue;
+      body.tidalStress = Math.max(0, body.tidalStress - elapsedDays * .025);
+      if (body.tidalStress === 0) body.tidalPrimaryId = null;
+    }
     if (state.bodies.length >= MAX_BODIES - 3) return;
     for (let i = 0; i < state.bodies.length; i++) {
       for (let j = i + 1; j < state.bodies.length; j++) {
@@ -554,7 +561,26 @@
         if (vulnerable.tidalImmune || primary.mass < vulnerable.mass * 12) continue;
         const distance = Math.hypot(primary.x - vulnerable.x, primary.y - vulnerable.y);
         const roche = rocheLimit(primary, vulnerable.mass, vulnerable.collisionRadius, vulnerable.gravityScale);
-        if (distance >= roche || distance <= primary.collisionRadius + vulnerable.collisionRadius) continue;
+        if (distance >= roche || (distance <= primary.collisionRadius + vulnerable.collisionRadius && vulnerable.tidalStress < 1)) continue;
+        const penetration = clamp(1 - distance / roche, 0, 1);
+        vulnerable.tidalPrimaryId = primary.id;
+        const previousStage = Math.floor((vulnerable.tidalStress ?? 0) * 5);
+        vulnerable.tidalStress = clamp((vulnerable.tidalStress ?? 0) + elapsedDays * (.035 + penetration * .3), 0, 1);
+        const nextStage = Math.floor(vulnerable.tidalStress * 5);
+        if (nextStage > previousStage && nextStage < 5) {
+          const angle = Math.atan2(vulnerable.y - primary.y, vulnerable.x - primary.x);
+          for (let shard = 0; shard < 5; shard++) {
+            const scatter = angle + (Math.random() - .5) * 1.1;
+            state.effects.push({
+              kind: "fragment", x: vulnerable.x, y: vulnerable.y,
+              vx: vulnerable.vx + Math.cos(scatter) * (.03 + Math.random() * .08),
+              vy: vulnerable.vy + Math.sin(scatter) * (.03 + Math.random() * .08),
+              rotation: Math.random() * Math.PI, spin: (Math.random() - .5) * 9,
+              life: 2.2, maxLife: 2.2, size: 3 + Math.random() * 5, color: vulnerable.color,
+            });
+          }
+        }
+        if (vulnerable.tidalStress < 1) continue;
         const available = Math.min(7, MAX_BODIES - state.bodies.length + 1);
         if (available < 3) return;
         const fragments = [];
@@ -564,16 +590,25 @@
           const angle = baseAngle + index / available * Math.PI * 2;
           const spread = vulnerable.collisionRadius * (1.5 + index * .18);
           const kick = .025 + index * .004;
+          const fragmentCollisionRadius = vulnerable.collisionRadius / Math.cbrt(available) * .58;
+          let fragmentX = vulnerable.x + Math.cos(angle) * spread;
+          let fragmentY = vulnerable.y + Math.sin(angle) * spread;
+          if (Math.hypot(fragmentX - primary.x, fragmentY - primary.y) <= primary.collisionRadius + fragmentCollisionRadius) {
+            const safeAngle = baseAngle + (index - (available - 1) / 2) * .1;
+            const safeDistance = primary.collisionRadius + fragmentCollisionRadius * (1.7 + index * .45);
+            fragmentX = primary.x + Math.cos(safeAngle) * safeDistance;
+            fragmentY = primary.y + Math.sin(safeAngle) * safeDistance;
+          }
           fragments.push(makeBody({
             name: `${vulnerable.name} fragment ${index + 1}`,
             mass: fragmentMassEarths,
             radius: Math.max(.008, vulnerable.radius / Math.cbrt(available)),
-            collisionRadius: vulnerable.collisionRadius / Math.cbrt(available) * .58,
+            collisionRadius: fragmentCollisionRadius,
             color: vulnerable.color,
             texture: vulnerable.texture,
             scienceType: vulnerable.scienceType,
-            x: vulnerable.x + Math.cos(angle) * spread,
-            y: vulnerable.y + Math.sin(angle) * spread,
+            x: fragmentX,
+            y: fragmentY,
             vx: vulnerable.vx + Math.cos(angle) * kick,
             vy: vulnerable.vy + Math.sin(angle) * kick,
             tidalImmune: true,
@@ -581,12 +616,14 @@
             magneticScale: vulnerable.magneticScale,
           }));
         }
+        primary.ring = true;
+        primary.ringScale = clamp((primary.ringScale ?? 1) + .3 + vulnerable.mass / primary.mass * 1.5, 1, 4.5);
         spawnImpactEffect(primary, vulnerable, vulnerable.x, vulnerable.y);
         state.bodies.splice(state.bodies.indexOf(vulnerable), 1, ...fragments);
         if (state.selectedId === vulnerable.id) state.selectedId = fragments[0].id;
         updateSelectionUI();
         renderSystemRoster();
-        toast(`${vulnerable.name} broke apart inside ${primary.name}'s Roche limit`);
+        toast(`${vulnerable.name} was tidally shredded — ${primary.name}'s rings grew`);
         return;
       }
     }
@@ -803,6 +840,87 @@
     }
   }
 
+  function binaryPairs() {
+    const candidates = [];
+    for (let i = 0; i < state.bodies.length; i++) {
+      for (let j = i + 1; j < state.bodies.length; j++) {
+        const a = state.bodies[i];
+        const b = state.bodies[j];
+        const ratio = Math.min(a.mass, b.mass) / Math.max(a.mass, b.mass);
+        if (ratio < BINARY_MASS_RATIO) continue;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= a.collisionRadius + b.collisionRadius) continue;
+        const dvx = b.vx - a.vx;
+        const dvy = b.vy - a.vy;
+        const energy = (dvx * dvx + dvy * dvy) / 2 - G * pairGravityMass(a, b) / Math.max(distance, 1e-12);
+        if (energy >= 0) continue;
+        const explicit = a.binaryPartnerId === b.id && b.binaryPartnerId === a.id;
+        candidates.push({ a, b, distance, score: explicit ? -1e9 : energy / Math.max(distance, 1e-12) });
+      }
+    }
+    candidates.sort((first, second) => first.score - second.score);
+    const used = new Set();
+    return candidates.filter((pair) => {
+      if (used.has(pair.a.id) || used.has(pair.b.id)) return false;
+      used.add(pair.a.id); used.add(pair.b.id); return true;
+    });
+  }
+
+  function binaryClassification(pair) {
+    const bothStars = pair.a.texture === "sun" && pair.b.texture === "sun";
+    const bothMoons = pair.a.isMoon && pair.b.isMoon;
+    return bothStars ? "Binary star system" : bothMoons ? "Binary moon system" : "Binary planet system";
+  }
+
+  function drawBinaryBarycenters() {
+    for (const pair of binaryPairs()) {
+      const totalMass = pair.a.mass + pair.b.mass;
+      const x = (pair.a.x * pair.a.mass + pair.b.x * pair.b.mass) / totalMass;
+      const y = (pair.a.y * pair.a.mass + pair.b.y * pair.b.mass) / totalMass;
+      const point = worldToScreen(x, y);
+      const aPoint = bodyDisplayPoint(pair.a);
+      const bPoint = bodyDisplayPoint(pair.b);
+      ctx.save();
+      ctx.strokeStyle = "rgba(100,221,255,.42)";
+      ctx.fillStyle = "#83e7ff";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 5]);
+      ctx.beginPath(); ctx.moveTo(aPoint.x, aPoint.y); ctx.lineTo(bPoint.x, bPoint.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(point.x, point.y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(point.x, point.y, 9, 0, Math.PI * 2); ctx.stroke();
+      ctx.font = "700 8px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("BARYCENTER", point.x, point.y - 14);
+      ctx.restore();
+    }
+  }
+
+  function drawRocheZones() {
+    for (const primary of state.bodies) {
+      const active = primary.id === state.selectedId || primary.id === state.hoveredId || state.bodies.some((body) => body.tidalPrimaryId === primary.id && body.tidalStress > 0);
+      if (!active) continue;
+      const referenceMass = 1 / EARTHS_PER_SUN;
+      const roche = rocheLimit(primary, referenceMass, EARTH_RADIUS_AU);
+      const point = bodyDisplayPoint(primary);
+      const radius = Math.max(roche * state.camera.zoom, visualRadius(primary) * 3.4);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,103,129,.52)";
+      ctx.fillStyle = "rgba(255,63,94,.045)";
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([5, 6]);
+      ctx.beginPath(); ctx.arc(point.x, point.y, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(255,151,169,.85)";
+      ctx.font = "700 8px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("ROCHE LIMIT", point.x, point.y - radius - 7);
+      ctx.restore();
+    }
+  }
+
   function drawTrails() {
     if (!state.showTrails) return;
     ctx.lineCap = "round";
@@ -855,6 +973,11 @@
 
     ctx.save();
     ctx.translate(p.x, p.y);
+    if ((body.tidalStress ?? 0) > 0) {
+      const primary = state.bodies.find((candidate) => candidate.id === body.tidalPrimaryId);
+      if (primary) ctx.rotate(Math.atan2(primary.y - body.y, primary.x - body.x));
+      ctx.scale(1 + body.tidalStress * .95, Math.max(.48, 1 - body.tidalStress * .42));
+    }
     drawMagnetosphere(body, radius);
     if (body.texture === "sun") {
       const glow = ctx.createRadialGradient(0, 0, radius * .3, 0, 0, radius * 3.2);
@@ -1032,7 +1155,7 @@
     ctx.strokeStyle = behind ? "rgba(175,157,123,.42)" : "rgba(232,215,177,.7)";
     ctx.lineWidth = Math.max(2, radius * .18);
     ctx.beginPath();
-    ctx.arc(0, 0, radius * 1.7, behind ? Math.PI : 0, behind ? Math.PI * 2 : Math.PI);
+    ctx.arc(0, 0, radius * 1.7 * (body.ringScale ?? 1), behind ? Math.PI : 0, behind ? Math.PI * 2 : Math.PI);
     ctx.stroke();
     ctx.restore();
   }
@@ -1176,8 +1299,10 @@
     drawBackground();
     drawGrid();
     drawOrbitGuides();
+    drawRocheZones();
     drawTrails();
     [...state.bodies].sort((a, b) => a.mass - b.mass).forEach(drawBody);
+    drawBinaryBarycenters();
     drawMoveGuide();
     drawLabels();
     drawEffects();
@@ -1233,8 +1358,13 @@
     ui.magneticScale.value = body.magneticScale ?? 1;
     ui.magneticScaleValue.value = `${formatNumber(body.magneticScale ?? 1, 1)}×`;
     const science = scienceByName[body.name] || body.science || scienceByType[body.scienceType] || scienceByType.rock;
-    ui.bodyClass.textContent = science.className;
-    ui.bodySummary.textContent = science.summary;
+    const binaryPair = binaryPairs().find((pair) => pair.a.id === body.id || pair.b.id === body.id);
+    const binaryPartner = binaryPair ? (binaryPair.a.id === body.id ? binaryPair.b : binaryPair.a) : null;
+    ui.bodyClass.textContent = binaryPair ? binaryClassification(binaryPair) : science.className;
+    ui.bodySummary.textContent = body.tidalStress > 0
+      ? `Tidal stretching ${Math.round(body.tidalStress * 100)}%`
+      : binaryPartner ? `Shares a barycenter with ${binaryPartner.name}` : science.summary;
+    ui.bodySummary.dataset.tidal = body.tidalStress > 0 ? "true" : "false";
     ui.bodyComposition.textContent = science.composition;
     ui.bodyAtmosphere.textContent = science.atmosphere;
     ui.bodyTemperature.textContent = science.temperature;
@@ -1263,6 +1393,13 @@
     ui.runStatus.parentElement.classList.toggle("paused", !state.running);
     ui.playPause.textContent = state.running ? "Ⅱ" : "▶";
     ui.playPause.setAttribute("aria-label", state.running ? "Pause simulation" : "Continue simulation");
+    const inspected = selectedBody();
+    if (inspected?.tidalStress > 0) {
+      ui.bodySummary.textContent = `Tidal stretching ${Math.round(inspected.tidalStress * 100)}%`;
+      ui.bodySummary.dataset.tidal = "true";
+    } else if (inspected && ui.bodySummary.dataset.tidal === "true") {
+      updateSelectionUI();
+    }
     const scaleChoices = [.001, .002, .005, .01, .02, .05, .1, .2, .5, 1, 2, 5, 10, 20, 50, 100];
     const target = 90 / state.camera.zoom;
     const scale = scaleChoices.reduce((best, value) => Math.abs(value - target) < Math.abs(best - target) ? value : best, 1);
@@ -1299,7 +1436,14 @@
 
   function currentSpawnSpec() {
     const type = document.querySelector('input[name="spawnType"]:checked')?.value || "asteroid";
-    return { type, spec: spawnCatalog[type] };
+    let spec = type === "star" ? { ...spawnCatalog.star, ...starCatalog[ui.starType.value] } : spawnCatalog[type];
+    const target = state.bodies.find((body) => body.id === state.launchTargetId);
+    if (state.launchMode === "binary" && target) {
+      const matchedMass = target.mass * EARTHS_PER_SUN;
+      const radiusScale = Math.cbrt(matchedMass / Math.max(spec.mass, 1e-12));
+      spec = { ...spec, mass: matchedMass, radius: spec.radius * radiusScale, collisionRadius: spec.collisionRadius * radiusScale };
+    }
+    return { type, spec };
   }
 
   function osculatingOrbit(body, parent) {
@@ -1375,7 +1519,7 @@
     const primaryDensity = gravitationalMass(primary) / Math.max(primary.collisionRadius ** 3, 1e-30);
     const satelliteDensity = satelliteMass * satelliteGravityScale / Math.max(satelliteRadius ** 3, 1e-30);
     const densityRatio = clamp(primaryDensity / Math.max(satelliteDensity, 1e-30), .12, 12);
-    return 2.44 * primary.collisionRadius * Math.cbrt(densityRatio);
+    return 2.44 * ROCHE_GAMEPLAY_SCALE * primary.collisionRadius * Math.cbrt(densityRatio);
   }
 
   function orbitLimits(target, spec, eccentricity) {
@@ -1388,15 +1532,17 @@
 
   function setLaunchMode(mode) {
     state.launchMode = mode;
-    const orbit = mode === "orbit";
-    ui.impactMode.classList.toggle("active", !orbit);
-    ui.orbitMode.classList.toggle("active", orbit);
-    ui.impactMode.setAttribute("aria-pressed", String(!orbit));
-    ui.orbitMode.setAttribute("aria-pressed", String(orbit));
-    ui.impactOptions.hidden = orbit;
-    ui.orbitOptions.hidden = !orbit;
-    ui.launchAtTarget.innerHTML = orbit ? "<span>◉</span> Place orbit with mouse" : "<span>➤</span> Launch at selected target";
-    ui.launchNote.textContent = orbit ? "After pressing the button, move the mouse around the target to set distance, then click to create the orbit." : "The object spawns outside the target and automatically aims toward it.";
+    const orbital = mode !== "impact";
+    ui.impactMode.classList.toggle("active", mode === "impact");
+    ui.orbitMode.classList.toggle("active", mode === "orbit");
+    ui.binaryMode.classList.toggle("active", mode === "binary");
+    ui.impactMode.setAttribute("aria-pressed", String(mode === "impact"));
+    ui.orbitMode.setAttribute("aria-pressed", String(mode === "orbit"));
+    ui.binaryMode.setAttribute("aria-pressed", String(mode === "binary"));
+    ui.impactOptions.hidden = orbital;
+    ui.orbitOptions.hidden = !orbital;
+    ui.launchAtTarget.innerHTML = mode === "binary" ? "<span>∞</span> Place binary with mouse" : mode === "orbit" ? "<span>◉</span> Place orbit with mouse" : "<span>➤</span> Launch at selected target";
+    ui.launchNote.textContent = mode === "binary" ? "The new body is mass-matched and both objects are placed around their shared barycenter." : mode === "orbit" ? "After pressing the button, move the mouse around the target to set distance, then click to create the orbit." : "The object spawns outside the target and automatically aims toward it.";
   }
 
   function beginOrbitPlacement() {
@@ -1416,7 +1562,9 @@
     state.running = false;
     closeLauncher();
     ui.modeHint.hidden = false;
-    ui.modeHint.textContent = `Move around ${target.name} to set orbit distance · Click to place · Esc to cancel`;
+    ui.modeHint.textContent = state.launchMode === "binary"
+      ? `Choose the separation around ${target.name} · Click to create the binary · Esc to cancel`
+      : `Move around ${target.name} to set orbit distance · Click to place · Esc to cancel`;
     updateOrbitReadout();
   }
 
@@ -1454,23 +1602,52 @@
     const speed = Math.sqrt(G * effectivePairMass * (2 / state.orbitDistance - 1 / semiMajor));
     const cos = Math.cos(state.orbitAngle);
     const sin = Math.sin(state.orbitAngle);
+    const binary = state.launchMode === "binary";
+    const centerX = target.x;
+    const centerY = target.y;
+    const centerVx = target.vx;
+    const centerVy = target.vy;
+    const totalMass = target.mass + bodyMass;
+    const targetFraction = bodyMass / totalMass;
+    const bodyFraction = target.mass / totalMass;
+    if (binary) {
+      const targetShiftX = -cos * state.orbitDistance * targetFraction;
+      const targetShiftY = -sin * state.orbitDistance * targetFraction;
+      const targetVelocityX = sin * speed * direction * targetFraction;
+      const targetVelocityY = -cos * speed * direction * targetFraction;
+      const targetGroup = new Set(bodyGroupIds(target.id));
+      for (const member of state.bodies) {
+        if (!targetGroup.has(member.id)) continue;
+        member.x += targetShiftX;
+        member.y += targetShiftY;
+        member.vx += targetVelocityX;
+        member.vy += targetVelocityY;
+        member.trail = [];
+      }
+    }
     const body = makeBody({
       ...spec,
       name: `${spec.label} ${state.idCounter}`,
-      x: target.x + cos * state.orbitDistance,
-      y: target.y + sin * state.orbitDistance,
-      vx: target.vx - sin * speed * direction,
-      vy: target.vy + cos * speed * direction,
+      x: binary ? centerX + cos * state.orbitDistance * bodyFraction : target.x + cos * state.orbitDistance,
+      y: binary ? centerY + sin * state.orbitDistance * bodyFraction : target.y + sin * state.orbitDistance,
+      vx: binary ? centerVx - sin * speed * direction * bodyFraction : target.vx - sin * speed * direction,
+      vy: binary ? centerVy + cos * speed * direction * bodyFraction : target.vy + cos * speed * direction,
       parentId: target.id,
+      binaryPartnerId: binary ? target.id : null,
       orbit: { parentId: target.id, a: semiMajor, e: eccentricity, angle: state.orbitAngle, direction },
     });
+    if (binary) {
+      const formerPartner = state.bodies.find((candidate) => candidate.id === target.binaryPartnerId);
+      if (formerPartner) formerPartner.binaryPartnerId = null;
+      target.binaryPartnerId = body.id;
+    }
     state.bodies.push(body);
     state.orbitPlacement = false;
     state.running = state.resumeAfterOrbit;
     updateInteractionHint();
     selectBody(body);
     renderSystemRoster();
-    toast(`${body.name} placed in orbit around ${target.name}`);
+    toast(binary ? `${target.name} and ${body.name} now orbit their barycenter` : `${body.name} placed in orbit around ${target.name}`);
   }
 
   function cancelOrbitPlacement() {
@@ -1502,8 +1679,10 @@
     if (!state.bodies.some((body) => body.id === state.launchTargetId)) state.launchTargetId = null;
     ui.systemRoster.replaceChildren();
     ui.rosterCount.textContent = `${state.bodies.length} ${state.bodies.length === 1 ? "body" : "bodies"}`;
+    const binaries = binaryPairs();
     for (const body of [...state.bodies].sort((a, b) => b.mass - a.mass)) {
       const science = scienceByName[body.name] || body.science || scienceByType[body.scienceType] || scienceByType.rock;
+      const binary = binaries.find((pair) => pair.a.id === body.id || pair.b.id === body.id);
       const button = document.createElement("button");
       button.type = "button";
       button.className = `roster-body${body.id === state.launchTargetId ? " selected" : ""}`;
@@ -1517,7 +1696,7 @@
       const type = document.createElement("small");
       const mass = document.createElement("span");
       name.textContent = body.name;
-      type.textContent = science.className;
+      type.textContent = binary ? binaryClassification(binary) : science.className;
       mass.textContent = `${formatNumber(body.mass * EARTHS_PER_SUN, 2)} M⊕`;
       copy.append(name, type);
       button.append(orb, copy, mass);
@@ -1532,7 +1711,7 @@
       toast(target ? `Maximum of ${MAX_BODIES} bodies reached` : "Select a target first");
       return;
     }
-    if (state.launchMode === "orbit") { beginOrbitPlacement(); return; }
+    if (state.launchMode !== "impact") { beginOrbitPlacement(); return; }
     const { spec } = currentSpawnSpec();
     const angle = (state.idCounter * 2.399963) % (Math.PI * 2);
     const minimumDistance = (target.collisionRadius + spec.collisionRadius) * 8;
@@ -1791,6 +1970,11 @@
     ui.launchAtTarget.addEventListener("click", launchAtSelectedTarget);
     ui.impactMode.addEventListener("click", () => setLaunchMode("impact"));
     ui.orbitMode.addEventListener("click", () => setLaunchMode("orbit"));
+    ui.binaryMode.addEventListener("click", () => setLaunchMode("binary"));
+    ui.spawnTypes.addEventListener("change", () => {
+      const type = document.querySelector('input[name="spawnType"]:checked')?.value;
+      ui.starTypeField.hidden = type !== "star";
+    });
     ui.eccentricity.addEventListener("input", () => {
       const value = Number(ui.eccentricity.value) / 100;
       ui.eccentricityValue.value = value.toFixed(2);
@@ -1827,7 +2011,6 @@
       ui.trailLengthValue.value = state.trailLength;
       for (const body of state.bodies) if (body.trail.length > state.trailLength) body.trail.splice(0, body.trail.length - state.trailLength);
     });
-    ui.collisionMode.addEventListener("change", () => { state.collisionMode = ui.collisionMode.value; });
     [["showTrails", "showTrails"], ["showLabels", "showLabels"], ["showGrid", "showGrid"], ["showVelocity", "showVelocity"], ["showOrbits", "showOrbits"]].forEach(([id, property]) => {
       ui[id].addEventListener("change", () => { state[property] = ui[id].checked; });
     });
