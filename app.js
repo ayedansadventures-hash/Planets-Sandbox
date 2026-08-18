@@ -22,7 +22,7 @@
     saturn: { src: "assets/nasa/saturn.jpg", crop: .59, cx: .55, cy: .46 },
     uranus: { src: "assets/nasa/uranus.jpg", crop: .82, cx: .5, cy: .5 },
     neptune: { src: "assets/nasa/neptune.jpg", crop: .82, cx: .5, cy: .5 },
-    sun: { src: "assets/nasa/sun.jpg", crop: .96, cx: .5, cy: .5 },
+    sun: { src: "assets/nasa/sun.jpg", crop: .78, cx: .5, cy: .5 },
   };
   const nasaTextures = Object.fromEntries(Object.entries(nasaTextureSettings).map(([name, settings]) => {
     const image = new Image();
@@ -43,6 +43,7 @@
     running: true,
     simYears: 0,
     speedDays: 10,
+    effectiveSpeedDays: 10,
     trailLength: 180,
     showTrails: true,
     showLabels: true,
@@ -100,7 +101,7 @@
   };
 
   const spawnCatalog = {
-    asteroid: { label: "Asteroid", mass: .02, radius: .026, collisionRadius: 80 / KM_PER_AU, color: "#9c8778", texture: "rock", scienceType: "asteroid" },
+    asteroid: { label: "Asteroid", mass: 8.6e-7, radius: .026, collisionRadius: 80 / KM_PER_AU, color: "#9c8778", texture: "rock", scienceType: "asteroid" },
     gasGiant: { label: "Gas giant", mass: 180, radius: .12, collisionRadius: 60000 / KM_PER_AU, color: "#d19a68", texture: "jupiter", scienceType: "gasGiant", ring: true },
     planet: { label: "New planet", mass: 1, radius: .055, collisionRadius: EARTH_RADIUS_AU, color: "#4d9fe8", texture: "earth", scienceType: "planet" },
     hotPlanet: { label: "Hot planet", mass: 2.5, radius: .064, collisionRadius: 8500 / KM_PER_AU, color: "#f05b38", texture: "mars", scienceType: "hotPlanet" },
@@ -205,6 +206,7 @@
       referenceRadius: data.referenceRadius ?? radius,
       referenceCollisionRadius: data.referenceCollisionRadius ?? collisionRadius,
       color: data.color || "#9cb8d8",
+      naturalColor: data.naturalColor || data.color || "#9cb8d8",
       texture: data.texture || "rock",
       ring: Boolean(data.ring),
       ringScale: Math.max(1, data.ringScale ?? 1),
@@ -216,7 +218,6 @@
       tidalStress: clamp(data.tidalStress ?? 0, 0, 1),
       tidalPrimaryId: data.tidalPrimaryId ?? null,
       binaryPartnerId: data.binaryPartnerId ?? null,
-      displayAngle: Number.isFinite(data.displayAngle) ? data.displayAngle : null,
       orbit: data.orbit ? { ...data.orbit } : null,
       trail: [],
     };
@@ -326,11 +327,11 @@
     } else if (name === "binary") {
       const distance = 2.4;
       const speed = Math.sqrt(G * .7 / (distance * 2));
-      state.bodies = [
-        makeBody({ name: "Aurelia", mass: 230000, radius: .17, color: "#ffd072", texture: "sun", x: -distance / 2, vy: -speed }),
-        makeBody({ name: "Cyanis", mass: 230000, radius: .17, color: "#88c9ff", texture: "sun", x: distance / 2, vy: speed }),
-        makeBody({ name: "Drifter", mass: 3, radius: .055, color: "#b37aff", texture: "ice", y: 5.2, vx: -2.35 }),
-      ];
+      const aurelia = makeBody({ name: "Aurelia", mass: 230000, radius: .17, color: "#ffd072", texture: "sun", x: -distance / 2, vy: -speed });
+      const cyanis = makeBody({ name: "Cyanis", mass: 230000, radius: .17, color: "#88c9ff", texture: "sun", x: distance / 2, vy: speed });
+      aurelia.binaryPartnerId = cyanis.id;
+      cyanis.binaryPartnerId = aurelia.id;
+      state.bodies = [aurelia, cyanis, makeBody({ name: "Drifter", mass: 3, radius: .055, color: "#b37aff", texture: "ice", y: 5.2, vx: -2.35 })];
       state.camera = { x: 0, y: 0, zoom: 78 };
     } else {
       const colors = ["#ffc35c", "#62b8ff", "#f36f56", "#b992ff", "#6ce0b1"];
@@ -501,8 +502,9 @@
         const primary = a.mass >= b.mass ? a : b;
         const vulnerable = primary === a ? b : a;
         const primaryRoche = rocheLimit(primary, vulnerable.mass, vulnerable.collisionRadius, vulnerable.gravityScale);
-        const crossedRoche = Math.min(distance, Math.hypot(closestDx, closestDy)) < primaryRoche;
-        if (crossedRoche && !vulnerable.tidalImmune && primary.mass >= vulnerable.mass * 12) {
+        const crossedRoche = primaryRoche > 0 && Math.min(distance, Math.hypot(closestDx, closestDy)) < primaryRoche;
+        const wasTidallyStressed = vulnerable.tidalPrimaryId === primary.id && vulnerable.tidalStress > 0;
+        if (crossedRoche && wasTidallyStressed && !vulnerable.tidalImmune && primary.mass >= vulnerable.mass * 12) {
           if (contactT < 1) {
             a.x = (a.prevX ?? a.x) + (a.x - (a.prevX ?? a.x)) * contactT;
             a.y = (a.prevY ?? a.y) + (a.y - (a.prevY ?? a.y)) * contactT;
@@ -514,31 +516,53 @@
           return;
         }
         spawnImpactEffect(a, b, (a.x + b.x) / 2, (a.y + b.y) / 2);
-        const totalMass = a.mass + b.mass;
-        const survivor = primary;
-        const mergedGravityScale = (gravitationalMass(a) + gravitationalMass(b)) / totalMass;
-        survivor.x = (a.x * a.mass + b.x * b.mass) / totalMass;
-        survivor.y = (a.y * a.mass + b.y * b.mass) / totalMass;
-        survivor.vx = (a.vx * a.mass + b.vx * b.mass) / totalMass;
-        survivor.vy = (a.vy * a.mass + b.vy * b.mass) / totalMass;
-        survivor.mass = totalMass;
-        survivor.gravityScale = mergedGravityScale;
-        survivor.radius = Math.cbrt(a.radius ** 3 + b.radius ** 3);
-        survivor.collisionRadius = Math.cbrt(a.collisionRadius ** 3 + b.collisionRadius ** 3);
-        survivor.referenceMass = survivor.mass;
-        survivor.referenceRadius = survivor.radius;
-        survivor.referenceCollisionRadius = survivor.collisionRadius;
-        survivor.name = `${survivor.name} + ${survivor === a ? b.name : a.name}`.slice(0, 24);
-        survivor.trail = [];
-        if (state.selectedId === vulnerable.id) state.selectedId = survivor.id;
-        if (state.followBodyId === vulnerable.id) state.followBodyId = survivor.id;
-        state.bodies.splice(state.bodies.indexOf(vulnerable), 1);
-        updateSelectionUI();
-        renderSystemRoster();
-        toast(`${firstName} and ${secondName} merged`);
+        mergeBodies(a, b, `${firstName} and ${secondName} merged`);
         return;
       }
     }
+  }
+
+  function mergeBodies(a, b, message) {
+    const survivor = a.mass >= b.mass ? a : b;
+    const removed = survivor === a ? b : a;
+    const totalMass = a.mass + b.mass;
+    const mergedGravityScale = (gravitationalMass(a) + gravitationalMass(b)) / totalMass;
+    const oldIds = new Set([a.id, b.id]);
+    survivor.x = (a.x * a.mass + b.x * b.mass) / totalMass;
+    survivor.y = (a.y * a.mass + b.y * b.mass) / totalMass;
+    survivor.vx = (a.vx * a.mass + b.vx * b.mass) / totalMass;
+    survivor.vy = (a.vy * a.mass + b.vy * b.mass) / totalMass;
+    survivor.mass = totalMass;
+    survivor.gravityScale = mergedGravityScale;
+    survivor.radius = Math.cbrt(a.radius ** 3 + b.radius ** 3);
+    survivor.collisionRadius = Math.cbrt(a.collisionRadius ** 3 + b.collisionRadius ** 3);
+    survivor.referenceMass = survivor.mass;
+    survivor.referenceRadius = survivor.radius;
+    survivor.referenceCollisionRadius = survivor.collisionRadius;
+    survivor.name = `${survivor.name} + ${removed.name}`.slice(0, 24);
+    survivor.trail = [];
+    survivor.tidalStress = 0;
+    survivor.tidalPrimaryId = null;
+    survivor.binaryPartnerId = null;
+    state.bodies.splice(state.bodies.indexOf(removed), 1);
+    for (const body of state.bodies) {
+      if (body.id === survivor.id) continue;
+      if (body.parentId === removed.id) body.parentId = survivor.id;
+      if (oldIds.has(body.binaryPartnerId)) body.binaryPartnerId = null;
+      if (body.orbit?.parentId === removed.id) body.orbit = { ...body.orbit, parentId: survivor.id };
+      if (body.parentId === survivor.id) body.orbit = osculatingOrbit(body, survivor);
+    }
+    if (oldIds.has(survivor.parentId)) survivor.parentId = null;
+    const survivorParent = survivor.parentId ? state.bodies.find((body) => body.id === survivor.parentId) : null;
+    survivor.orbit = survivorParent ? osculatingOrbit(survivor, survivorParent) : null;
+    if (state.selectedId === removed.id) state.selectedId = survivor.id;
+    if (state.followBodyId === removed.id) state.followBodyId = survivor.id;
+    if (state.launchTargetId === removed.id) state.launchTargetId = survivor.id;
+    refreshOrbitalRelationships();
+    updateSelectionUI();
+    renderSystemRoster();
+    toast(message);
+    return survivor;
   }
 
   function spawnImpactEffect(a, b, x, y) {
@@ -578,7 +602,6 @@
       body.tidalStress = Math.max(0, body.tidalStress - elapsedDays * .025);
       if (body.tidalStress === 0) body.tidalPrimaryId = null;
     }
-    if (state.bodies.length >= MAX_BODIES - 3) return;
     for (let i = 0; i < state.bodies.length; i++) {
       for (let j = i + 1; j < state.bodies.length; j++) {
         const a = state.bodies[i];
@@ -609,46 +632,65 @@
         }
         if (vulnerable.tidalStress < 1) continue;
         const available = Math.min(7, MAX_BODIES - state.bodies.length + 1);
-        if (available < 3) return;
+        primary.ring = true;
+        primary.ringScale = clamp((primary.ringScale ?? 1) + .3 + vulnerable.mass / primary.mass * 1.5, 1, 4.5);
+        if (available < 3) {
+          spawnImpactEffect(primary, vulnerable, vulnerable.x, vulnerable.y);
+          mergeBodies(primary, vulnerable, `${vulnerable.name} was absorbed into ${primary.name}'s rings`);
+          return;
+        }
         const fragments = [];
         const fragmentMassEarths = vulnerable.mass * EARTHS_PER_SUN / available;
         const baseAngle = Math.atan2(vulnerable.y - primary.y, vulnerable.x - primary.x);
-        for (let index = 0; index < available; index++) {
+        const fragmentCollisionRadius = vulnerable.collisionRadius / Math.cbrt(available);
+        const fragmentVisualRadius = vulnerable.radius / Math.cbrt(available);
+        const spread = vulnerable.collisionRadius * 2.2;
+        const kick = .04;
+        const offsets = Array.from({ length: available }, (_, index) => {
           const angle = baseAngle + index / available * Math.PI * 2;
-          const spread = vulnerable.collisionRadius * (1.5 + index * .18);
-          const kick = .025 + index * .004;
-          const fragmentCollisionRadius = vulnerable.collisionRadius / Math.cbrt(available) * .58;
-          let fragmentX = vulnerable.x + Math.cos(angle) * spread;
-          let fragmentY = vulnerable.y + Math.sin(angle) * spread;
-          if (Math.hypot(fragmentX - primary.x, fragmentY - primary.y) <= primary.collisionRadius + fragmentCollisionRadius) {
-            const safeAngle = baseAngle + (index - (available - 1) / 2) * .1;
-            const safeDistance = primary.collisionRadius + fragmentCollisionRadius * (1.7 + index * .45);
-            fragmentX = primary.x + Math.cos(safeAngle) * safeDistance;
-            fragmentY = primary.y + Math.sin(safeAngle) * safeDistance;
-          }
+          return {
+            x: Math.cos(angle) * spread,
+            y: Math.sin(angle) * spread,
+            vx: Math.cos(angle) * kick,
+            vy: Math.sin(angle) * kick,
+          };
+        });
+        const meanOffset = offsets.reduce((mean, offset) => ({
+          x: mean.x + offset.x / available,
+          y: mean.y + offset.y / available,
+          vx: mean.vx + offset.vx / available,
+          vy: mean.vy + offset.vy / available,
+        }), { x: 0, y: 0, vx: 0, vy: 0 });
+        for (let index = 0; index < available; index++) {
+          const offset = offsets[index];
           fragments.push(makeBody({
             name: `${vulnerable.name} fragment ${index + 1}`,
             mass: fragmentMassEarths,
-            radius: Math.max(.008, vulnerable.radius / Math.cbrt(available)),
+            radius: fragmentVisualRadius,
             collisionRadius: fragmentCollisionRadius,
             color: vulnerable.color,
             texture: vulnerable.texture,
             scienceType: vulnerable.scienceType,
-            x: fragmentX,
-            y: fragmentY,
-            vx: vulnerable.vx + Math.cos(angle) * kick,
-            vy: vulnerable.vy + Math.sin(angle) * kick,
+            x: vulnerable.x + offset.x - meanOffset.x,
+            y: vulnerable.y + offset.y - meanOffset.y,
+            vx: vulnerable.vx + offset.vx - meanOffset.vx,
+            vy: vulnerable.vy + offset.vy - meanOffset.vy,
             tidalImmune: true,
             gravityScale: vulnerable.gravityScale,
             magneticScale: vulnerable.magneticScale,
           }));
         }
-        primary.ring = true;
-        primary.ringScale = clamp((primary.ringScale ?? 1) + .3 + vulnerable.mass / primary.mass * 1.5, 1, 4.5);
         spawnImpactEffect(primary, vulnerable, vulnerable.x, vulnerable.y);
         state.bodies.splice(state.bodies.indexOf(vulnerable), 1, ...fragments);
+        for (const body of state.bodies) {
+          if (body.parentId === vulnerable.id) body.parentId = fragments[0].id;
+          if (body.orbit?.parentId === vulnerable.id) body.orbit = { ...body.orbit, parentId: fragments[0].id };
+          if (body.binaryPartnerId === vulnerable.id) body.binaryPartnerId = null;
+        }
         if (state.selectedId === vulnerable.id) state.selectedId = fragments[0].id;
         if (state.followBodyId === vulnerable.id) state.followBodyId = fragments[0].id;
+        if (state.launchTargetId === vulnerable.id) state.launchTargetId = fragments[0].id;
+        refreshOrbitalRelationships();
         updateSelectionUI();
         renderSystemRoster();
         toast(`${vulnerable.name} was tidally shredded — ${primary.name}'s rings grew`);
@@ -689,7 +731,7 @@
     return safestStep;
   }
 
-  function updateSimulation(realSeconds) {
+  function updateSimulation(realSeconds, wallSeconds = realSeconds) {
     if (!state.running || state.speedDays <= 0 || !state.bodies.length) return;
     const requestedDt = realSeconds * state.speedDays * DAY_TO_YEAR;
     const shortestPeriod = state.bodies.reduce((shortest, body) => {
@@ -708,20 +750,31 @@
     const steps = Math.min(750, Math.max(1, Math.ceil(requestedDt / accuracyStep)));
     const simDt = Math.min(requestedDt, steps * accuracyStep);
     const dt = simDt / steps;
-    for (let i = 0; i < steps; i++) integrate(dt);
+    const detailedTrails = state.trailLength > 0 && state.speedDays >= 50;
+    const sampleEvery = Math.max(1, Math.floor(steps / 6));
+    for (let i = 0; i < steps; i++) {
+      integrate(dt);
+      if (detailedTrails && ((i + 1) % sampleEvery === 0 || i === steps - 1)) recordTrailSnapshot();
+    }
     state.simYears += simDt;
+    const achievedSpeed = simDt / DAY_TO_YEAR / Math.max(wallSeconds, .001);
+    state.effectiveSpeedDays += (achievedSpeed - state.effectiveSpeedDays) * .12;
     state.relationshipTick += 1;
     if (state.relationshipTick >= 12) {
       state.relationshipTick = 0;
       refreshOrbitalRelationships();
     }
     state.trailTick += 1;
-    if (state.trailTick >= 3 && state.trailLength > 0) {
+    if (!detailedTrails && state.trailTick >= 3 && state.trailLength > 0) {
       state.trailTick = 0;
-      for (const body of state.bodies) {
-        body.trail.push({ x: body.x, y: body.y });
-        if (body.trail.length > state.trailLength) body.trail.splice(0, body.trail.length - state.trailLength);
-      }
+      recordTrailSnapshot();
+    }
+  }
+
+  function recordTrailSnapshot() {
+    for (const body of state.bodies) {
+      body.trail.push({ x: body.x, y: body.y });
+      if (body.trail.length > state.trailLength) body.trail.splice(0, body.trail.length - state.trailLength);
     }
   }
 
@@ -822,31 +875,9 @@
     return Math.max(minimum, Math.min(96, physical));
   }
 
-  function updateVisualMoonAngles(realSeconds) {
-    for (const body of state.bodies) {
-      if (!body.isMoon) continue;
-      const parent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
-      if (!parent) continue;
-      const targetAngle = Math.atan2(body.y - parent.y, body.x - parent.x);
-      if (!Number.isFinite(body.displayAngle)) body.displayAngle = targetAngle;
-      if (!state.running || state.speedDays <= 0) continue;
-      const relativeX = body.x - parent.x;
-      const relativeY = body.y - parent.y;
-      const relativeVelocityX = body.vx - parent.vx;
-      const relativeVelocityY = body.vy - parent.vy;
-      const angularMomentum = relativeX * relativeVelocityY - relativeY * relativeVelocityX;
-      const direction = body.orbit?.direction || (angularMomentum < 0 ? -1 : 1);
-      const semimajorAxis = body.orbit?.a || Math.hypot(relativeX, relativeY);
-      const periodDays = Math.sqrt(semimajorAxis ** 3 / Math.max(pairGravityMass(parent, body), 1e-15)) * 365.25;
-      const naturalDisplayRate = clamp(1.5 / Math.sqrt(Math.max(periodDays, .2)), .08, .7);
-      const speedBoost = clamp(Math.sqrt(state.speedDays / 10), .55, 1.8);
-      body.displayAngle += direction * Math.min(.8, naturalDisplayRate * speedBoost) * realSeconds;
-    }
-  }
-
   function bodyDisplayPoint(body) {
     const physical = worldToScreen(body.x, body.y);
-    if (!body.isMoon) return physical;
+    if (!body.isMoon || state.grabbedBodyId === body.id) return physical;
     const parent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
     if (!parent) return physical;
     const parentPoint = worldToScreen(parent.x, parent.y);
@@ -859,7 +890,7 @@
     const rank = Math.max(0, siblings.findIndex((candidate) => candidate.id === body.id));
     const readableDistance = visualRadius(parent) + visualRadius(body) + 10 + rank * 7;
     if (actualDistance >= readableDistance) return physical;
-    const angle = Number.isFinite(body.displayAngle) ? body.displayAngle : actualDistance > .001 ? Math.atan2(dy, dx) : body.id * 2.399;
+    const angle = actualDistance > 1e-9 ? Math.atan2(dy, dx) : body.id * 2.399;
     return {
       x: parentPoint.x + Math.cos(angle) * readableDistance,
       y: parentPoint.y + Math.sin(angle) * readableDistance,
@@ -1090,10 +1121,11 @@
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(image, sourceX, sourceY, cropSize, cropSize, -radius, -radius, radius * 2, radius * 2);
-    if (body.texture === "sun" && body.color.toLowerCase() !== "#ffbd55") {
+    const editedColor = normalizeHex(body.color) !== normalizeHex(body.naturalColor || body.color);
+    if (body.texture === "sun" || editedColor) {
       ctx.save();
       ctx.globalCompositeOperation = "color";
-      ctx.globalAlpha = .32;
+      ctx.globalAlpha = body.texture === "sun" ? .32 : .42;
       ctx.fillStyle = body.color;
       ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
       ctx.restore();
@@ -1402,11 +1434,11 @@
   }
 
   function frame(now) {
-    const elapsed = Math.min(.05, (now - state.lastFrame) / 1000);
+    const wallElapsed = Math.max(0, (now - state.lastFrame) / 1000);
+    const elapsed = Math.min(.05, wallElapsed);
     state.lastFrame = now;
-    state.fps += ((1 / Math.max(elapsed, .001)) - state.fps) * .06;
-    updateSimulation(elapsed);
-    updateVisualMoonAngles(elapsed);
+    state.fps += ((1 / Math.max(wallElapsed, .001)) - state.fps) * .06;
+    updateSimulation(elapsed, wallElapsed);
     updateEffects(elapsed);
     const followedBody = state.bodies.find((body) => body.id === state.followBodyId);
     if (followedBody) {
@@ -1491,6 +1523,10 @@
     ui.zoomValue.textContent = `${Math.round(state.camera.zoom / 30 * 100)}%`;
     ui.runStatus.textContent = state.running ? "RUNNING" : "PAUSED";
     ui.runStatus.parentElement.classList.toggle("paused", !state.running);
+    const throttled = state.running && state.speedDays >= 50 && state.effectiveSpeedDays < state.speedDays * .85;
+    ui.timeScaleValue.value = throttled
+      ? `${Math.round(state.effectiveSpeedDays)} actual / ${state.speedDays} requested`
+      : `${state.speedDays} days/s`;
     ui.playPause.textContent = state.running ? "Ⅱ" : "▶";
     ui.playPause.setAttribute("aria-label", state.running ? "Pause simulation" : "Continue simulation");
     const inspected = selectedBody();
@@ -1541,7 +1577,7 @@
     let spec = type === "star" ? { ...spawnCatalog.star, ...starCatalog[ui.starType.value] } : spawnCatalog[type];
     const target = state.bodies.find((body) => body.id === state.launchTargetId);
     if (state.launchMode === "binary" && target) {
-      const matchedMass = target.mass * EARTHS_PER_SUN;
+      const matchedMass = bodyGroupProperties(target.id).mass * EARTHS_PER_SUN;
       const radiusScale = Math.cbrt(matchedMass / Math.max(spec.mass, 1e-12));
       spec = { ...spec, mass: matchedMass, radius: spec.radius * radiusScale, collisionRadius: spec.collisionRadius * radiusScale };
     }
@@ -1618,7 +1654,9 @@
   }
 
   function rocheLimit(primary, satelliteMass, satelliteRadius, satelliteGravityScale = 1) {
-    const primaryDensity = gravitationalMass(primary) / Math.max(primary.collisionRadius ** 3, 1e-30);
+    const primaryGravitationalMass = gravitationalMass(primary);
+    if (primaryGravitationalMass <= 0 || satelliteMass <= 0 || satelliteGravityScale <= 0) return 0;
+    const primaryDensity = primaryGravitationalMass / Math.max(primary.collisionRadius ** 3, 1e-30);
     const satelliteDensity = satelliteMass * satelliteGravityScale / Math.max(satelliteRadius ** 3, 1e-30);
     const densityRatio = clamp(primaryDensity / Math.max(satelliteDensity, 1e-30), .12, 12);
     return 2.44 * ROCHE_GAMEPLAY_SCALE * primary.collisionRadius * Math.cbrt(densityRatio);
@@ -1650,6 +1688,11 @@
   function beginOrbitPlacement() {
     const target = state.bodies.find((body) => body.id === state.launchTargetId);
     if (!target) { toast("Select an X target first"); return; }
+    const alreadyBinary = state.launchMode === "binary" && binaryPairs().some((pair) => pair.a.id === target.id || pair.b.id === target.id);
+    if (alreadyBinary) {
+      toast(`${target.name} already has a binary partner`);
+      return;
+    }
     const { spec } = currentSpawnSpec();
     const eccentricity = Number(ui.eccentricity.value) / 100;
     const limits = orbitLimits(target, spec, eccentricity);
@@ -1705,21 +1748,33 @@
     const cos = Math.cos(state.orbitAngle);
     const sin = Math.sin(state.orbitAngle);
     const binary = state.launchMode === "binary";
-    const centerX = target.x;
-    const centerY = target.y;
-    const centerVx = target.vx;
-    const centerVy = target.vy;
-    const totalMass = target.mass + bodyMass;
+    if (binary && binaryPairs().some((pair) => pair.a.id === target.id || pair.b.id === target.id)) {
+      cancelOrbitPlacement();
+      toast(`${target.name} already has a binary partner`);
+      return;
+    }
+    const targetGroup = binary ? bodyGroupProperties(target.id) : null;
+    const targetMass = targetGroup?.mass ?? target.mass;
+    const targetGravityScale = targetGroup?.gravityScale ?? (target.gravityScale ?? 1);
+    const centerX = targetGroup?.x ?? target.x;
+    const centerY = targetGroup?.y ?? target.y;
+    const centerVx = targetGroup?.vx ?? target.vx;
+    const centerVy = targetGroup?.vy ?? target.vy;
+    const totalMass = targetMass + bodyMass;
     const targetFraction = bodyMass / totalMass;
-    const bodyFraction = target.mass / totalMass;
+    const bodyFraction = targetMass / totalMass;
+    const binaryEffectivePairMass = targetGravityScale * spawnGravityScale * totalMass;
+    const orbitalSpeed = binary
+      ? Math.sqrt(G * binaryEffectivePairMass * (2 / state.orbitDistance - 1 / semiMajor))
+      : speed;
     if (binary) {
       const targetShiftX = -cos * state.orbitDistance * targetFraction;
       const targetShiftY = -sin * state.orbitDistance * targetFraction;
-      const targetVelocityX = sin * speed * direction * targetFraction;
-      const targetVelocityY = -cos * speed * direction * targetFraction;
-      const targetGroup = new Set(bodyGroupIds(target.id));
+      const targetVelocityX = sin * orbitalSpeed * direction * targetFraction;
+      const targetVelocityY = -cos * orbitalSpeed * direction * targetFraction;
+      const targetGroupIds = new Set(targetGroup.ids);
       for (const member of state.bodies) {
-        if (!targetGroup.has(member.id)) continue;
+        if (!targetGroupIds.has(member.id)) continue;
         member.x += targetShiftX;
         member.y += targetShiftY;
         member.vx += targetVelocityX;
@@ -1732,15 +1787,13 @@
       name: `${spec.label} ${state.idCounter}`,
       x: binary ? centerX + cos * state.orbitDistance * bodyFraction : target.x + cos * state.orbitDistance,
       y: binary ? centerY + sin * state.orbitDistance * bodyFraction : target.y + sin * state.orbitDistance,
-      vx: binary ? centerVx - sin * speed * direction * bodyFraction : target.vx - sin * speed * direction,
-      vy: binary ? centerVy + cos * speed * direction * bodyFraction : target.vy + cos * speed * direction,
+      vx: binary ? centerVx - sin * orbitalSpeed * direction * bodyFraction : target.vx - sin * speed * direction,
+      vy: binary ? centerVy + cos * orbitalSpeed * direction * bodyFraction : target.vy + cos * speed * direction,
       parentId: target.id,
       binaryPartnerId: binary ? target.id : null,
       orbit: { parentId: target.id, a: semiMajor, e: eccentricity, angle: state.orbitAngle, direction },
     });
     if (binary) {
-      const formerPartner = state.bodies.find((candidate) => candidate.id === target.binaryPartnerId);
-      if (formerPartner) formerPartner.binaryPartnerId = null;
       target.binaryPartnerId = body.id;
     }
     state.bodies.push(body);
@@ -1897,6 +1950,23 @@
       }
     }
     return [...ids];
+  }
+
+  function bodyGroupProperties(rootId) {
+    const ids = bodyGroupIds(rootId);
+    const members = state.bodies.filter((body) => ids.includes(body.id));
+    const mass = members.reduce((sum, body) => sum + body.mass, 0);
+    const safeMass = Math.max(mass, 1e-15);
+    const gravitationalCharge = members.reduce((sum, body) => sum + gravitationalMass(body), 0);
+    return {
+      ids,
+      mass: safeMass,
+      gravityScale: gravitationalCharge / safeMass,
+      x: members.reduce((sum, body) => sum + body.x * body.mass, 0) / safeMass,
+      y: members.reduce((sum, body) => sum + body.y * body.mass, 0) / safeMass,
+      vx: members.reduce((sum, body) => sum + body.vx * body.mass, 0) / safeMass,
+      vy: members.reduce((sum, body) => sum + body.vy * body.mass, 0) / safeMass,
+    };
   }
 
   function beginBodyDrag(body, screenX, screenY) {
@@ -2154,8 +2224,12 @@
     ui.helpButton.addEventListener("click", () => ui.helpDialog.showModal());
     ui.closeHelp.addEventListener("click", () => ui.helpDialog.close());
     ui.mobilePanelButton.addEventListener("click", () => {
-      const isOpen = ui.controlPanel.classList.toggle("open");
-      ui.mobilePanelButton.setAttribute("aria-label", isOpen ? "Close settings" : "Open settings");
+      ui.controlPanel.classList.toggle("open");
+      ui.mobilePanelButton.setAttribute("aria-label", "Open settings");
+    });
+    ui.closeSettings.addEventListener("click", () => {
+      ui.controlPanel.classList.remove("open");
+      ui.mobilePanelButton.setAttribute("aria-label", "Open settings");
     });
     document.addEventListener("pointerdown", (event) => {
       if (!ui.controlPanel.classList.contains("open")) return;

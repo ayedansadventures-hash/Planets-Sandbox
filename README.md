@@ -20,12 +20,14 @@ Then visit `http://127.0.0.1:4173`.
 - Solar System with eight planets, realistic planetary eccentricities, and 21 major moons (Mercury and Venus have no natural moons)
 - Readable close-moon rendering keeps moons visible beside their planets at system-wide zoom while physics retains true orbital distances
 - Smaller planet/moon visuals and one-direction close-moon animation prevent high-speed wobble around giant planets even at the full 333-days-per-second setting
+- High-speed trails take extra physics samples for smoother moon paths, and the HUD reports achieved speed when a device must throttle
 - Solar System, Earth and Moon, binary-star, and five-body-chaos presets
 - Pause, resume, reset, clear, and time-speed controls
 - Per-body gravity strength from 0× to 100× with adaptive close-encounter timesteps
 - Barycentric Solar System initialization, including the Sun's Jupiter-driven motion around the system center of mass
 - Automatic merge-on-impact collisions, except inside Roche zones where the smaller body is tidally shredded into debris
 - A New Planet launcher with asteroid, gas-giant, terrestrial, and hot-planet types
+- Density-correct 80 km asteroids with realistic mass instead of planet-scale impactor mass
 - Impact and orbit modes with a live system roster for choosing the target body
 - Binary creation mode mass-matches a new companion and initializes both bodies around their shared barycenter
 - Automatic binary-planet, binary-moon, and binary-star classification with a live barycenter marker
