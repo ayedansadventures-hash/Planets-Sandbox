@@ -619,8 +619,8 @@
   function visualRadius(body) {
     const physical = body.collisionRadius * state.camera.zoom;
     const massEarths = body.mass * EARTHS_PER_SUN;
-    const minimum = massEarths > 10000 ? 15 : massEarths > 20 ? 9 : 5;
-    return Math.max(minimum, Math.min(90, physical));
+    const minimum = massEarths > 10000 ? 24 : massEarths > 20 ? 17 : body.isMoon ? 8 : 11;
+    return Math.max(minimum, Math.min(120, physical));
   }
 
   function drawOrbitGuides() {
@@ -991,7 +991,7 @@
     for (const body of state.bodies) {
       const p = worldToScreen(body.x, body.y);
       const distance = Math.hypot(screenX - p.x, screenY - p.y);
-      const hitRadius = Math.max(10, visualRadius(body) + 5);
+      const hitRadius = Math.max(22, visualRadius(body) + 8);
       if (distance <= hitRadius && distance < bestDistance) { found = body; bestDistance = distance; }
     }
     return found;

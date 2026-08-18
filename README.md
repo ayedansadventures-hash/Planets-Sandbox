@@ -47,6 +47,19 @@ Then visit `http://127.0.0.1:4173`.
 - Press `F` to fit the system in view
 - Press `Esc` to cancel add-body mode
 
+## Publish an update
+
+After changing the game, open Terminal and run:
+
+```bash
+cd "/Users/ayedan/Documents/ChatGPT/Space-planets Sandbox"
+git add .
+git commit -m "Update Planets Sandbox"
+git push origin main
+```
+
+If Git asks for a password, paste your GitHub personal access token. GitHub Pages will automatically rebuild the public game after the push finishes.
+
 ## Project files
 
 - `index.html` — game interface and control panel
