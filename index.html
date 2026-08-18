@@ -110,11 +110,16 @@
                   <div><small>ATMOSPHERE</small><strong id="bodyAtmosphere">Trace gases</strong></div>
                   <div><small>TEMPERATURE</small><strong id="bodyTemperature">15 °C</strong></div>
                   <div><small>DENSITY</small><strong id="bodyDensity">5.5 g/cm³</strong></div>
+                  <div><small>RADIUS</small><strong id="bodyRadius">6,371 km</strong></div>
                   <div><small>SURFACE GRAVITY</small><strong id="bodySurfaceGravity">1.00 g</strong></div>
                   <div><small>ESCAPE VELOCITY</small><strong id="bodyEscapeVelocity">11.2 km/s</strong></div>
                 </div>
                 <div class="magnetic-field">
                   <div><small>MAGNETIC FIELD</small><strong id="bodyMagneticValue">1.00× Earth</strong></div>
+                  <div class="range-field magnetic-control">
+                    <div class="range-label"><label for="magneticScale">Field multiplier <small>0–100× natural</small></label><output id="magneticScaleValue">1.00×</output></div>
+                    <input id="magneticScale" type="range" min="0" max="100" step="0.1" value="1" />
+                  </div>
                   <div class="field-meter"><i id="bodyMagneticMeter"></i></div>
                   <p id="bodyMagneticNote">A protective global magnetic field.</p>
                 </div>
@@ -137,7 +142,7 @@
         <div class="scale-indicator"><span id="scaleBar"></span><label id="scaleLabel">1 AU</label></div>
         <div class="mode-hint" id="modeHint" hidden>Choose an object and target from the New Planet menu · Esc to cancel</div>
         <div class="toast" id="toast" role="status"></div>
-        <div class="canvas-credit">Bodies enlarged for selection · physics uses true distances · Drag to move · Scroll to zoom</div>
+        <div class="canvas-credit">Bodies and close moons visually enlarged · physics uses true distances · Drag to move · Scroll to zoom</div>
 
         <aside class="launch-panel" id="launchPanel" aria-label="New planet launcher" aria-hidden="true" inert>
           <div class="launch-header">

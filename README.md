@@ -18,6 +18,7 @@ Then visit `http://127.0.0.1:4173`.
 
 - Momentum-conserving pairwise N-body gravity: every interaction applies equal-and-opposite forces
 - Solar System with eight planets, realistic planetary eccentricities, and 21 major moons (Mercury and Venus have no natural moons)
+- Readable close-moon rendering keeps moons visible beside their planets at system-wide zoom while physics retains true orbital distances
 - Solar System, Earth and Moon, binary-star, and five-body-chaos presets
 - Pause, resume, reset, clear, and time-speed controls
 - Per-body gravity strength from 0× to 100× with adaptive close-encounter timesteps
@@ -30,6 +31,8 @@ Then visit `http://127.0.0.1:4173`.
 - Visible impact flashes, expanding shockwaves, rocky fragments, sparks, and gas clouds
 - Scientific profiles for every body, including composition, atmosphere, temperature, density, magnetic-field strength, surface gravity, and escape velocity
 - Editable mass, color, name, and velocity for selected bodies
+- Changing mass automatically changes physical radius using constant-density scaling, so gravity, surface gravity, collisions, and size respond together
+- Editable 0–100× natural magnetic fields for every built-in or spawned body, with hover-visible blue magnetospheres
 - Camera panning, pointer-centered zooming, focus, and fit-to-system controls
 - Fast pointer-centered manual zoom; creating an impact or orbit never moves or zooms the camera automatically
 - Move Bodies mode: press `T`, then drag any planet, moon, or star while preserving its velocity; attached moons move with their parent

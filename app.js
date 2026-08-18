@@ -15,6 +15,7 @@
     bodies: [],
     initialSnapshot: [],
     selectedId: null,
+    hoveredId: null,
     running: true,
     simYears: 0,
     speedDays: 10,
@@ -31,8 +32,8 @@
     moveMode: false,
     grabbedBodyId: null,
     grabbedGroupIds: [],
-    grabOffsetX: 0,
-    grabOffsetY: 0,
+    grabScreenX: 0,
+    grabScreenY: 0,
     resumeAfterMove: true,
     launchStart: null,
     idCounter: 1,
@@ -152,6 +153,9 @@
   }
 
   function makeBody(data) {
+    const mass = Math.max(1e-12, data.mass ?? .1) / EARTHS_PER_SUN;
+    const radius = data.radius || .035;
+    const collisionRadius = data.collisionRadius || (data.radiusKm ? data.radiusKm / KM_PER_AU : estimatedCollisionRadius(data.mass ?? .1, data.texture));
     return {
       id: state.idCounter++,
       name: data.name || `Body ${state.idCounter}`,
@@ -159,10 +163,14 @@
       y: data.y || 0,
       vx: data.vx || 0,
       vy: data.vy || 0,
-      mass: Math.max(1e-12, data.mass ?? .1) / EARTHS_PER_SUN,
+      mass,
       gravityScale: clamp(data.gravityScale ?? 1, 0, 100),
-      radius: data.radius || .035,
-      collisionRadius: data.collisionRadius || (data.radiusKm ? data.radiusKm / KM_PER_AU : estimatedCollisionRadius(data.mass ?? .1, data.texture)),
+      magneticScale: clamp(data.magneticScale ?? 1, 0, 100),
+      radius,
+      collisionRadius,
+      referenceMass: data.referenceMass ?? mass,
+      referenceRadius: data.referenceRadius ?? radius,
+      referenceCollisionRadius: data.referenceCollisionRadius ?? collisionRadius,
       color: data.color || "#9cb8d8",
       texture: data.texture || "rock",
       ring: Boolean(data.ring),
@@ -174,6 +182,16 @@
       orbit: data.orbit ? { ...data.orbit } : null,
       trail: [],
     };
+  }
+
+  function resizeBodyForMass(body, massEarths) {
+    const newMass = Math.max(1e-12, massEarths) / EARTHS_PER_SUN;
+    const referenceMass = Math.max(body.referenceMass ?? body.mass, 1e-18);
+    const radiusScale = Math.cbrt(newMass / referenceMass);
+    body.mass = newMass;
+    body.radius = Math.max(.004, (body.referenceRadius ?? body.radius) * radiusScale);
+    body.collisionRadius = Math.max(1 / KM_PER_AU, (body.referenceCollisionRadius ?? body.collisionRadius) * radiusScale);
+    body.trail = [];
   }
 
   function makeOrbiter(parent, data) {
@@ -453,6 +471,9 @@
           survivor.gravityScale = mergedGravityScale;
           survivor.radius = Math.cbrt(a.radius ** 3 + b.radius ** 3);
           survivor.collisionRadius = Math.cbrt(a.collisionRadius ** 3 + b.collisionRadius ** 3);
+          survivor.referenceMass = survivor.mass;
+          survivor.referenceRadius = survivor.radius;
+          survivor.referenceCollisionRadius = survivor.collisionRadius;
           survivor.name = `${survivor.name} + ${survivor === a ? b.name : a.name}`.slice(0, 24);
           survivor.trail = [];
           const removed = survivor === a ? b : a;
@@ -557,6 +578,7 @@
             vy: vulnerable.vy + Math.sin(angle) * kick,
             tidalImmune: true,
             gravityScale: vulnerable.gravityScale,
+            magneticScale: vulnerable.magneticScale,
           }));
         }
         spawnImpactEffect(primary, vulnerable, vulnerable.x, vulnerable.y);
@@ -713,8 +735,33 @@
   function visualRadius(body) {
     const physical = body.collisionRadius * state.camera.zoom;
     const massEarths = body.mass * EARTHS_PER_SUN;
-    const minimum = massEarths > 10000 ? 24 : massEarths > 20 ? 17 : body.isMoon ? 8 : 11;
+    const moonRadiusKm = body.collisionRadius * KM_PER_AU;
+    const moonMinimum = clamp(4.5 + Math.log10(Math.max(2, moonRadiusKm)) * 1.65, 5, 10.5);
+    const planetMinimum = clamp(9 + Math.log10(Math.max(.02, massEarths) + 1) * 3.4, 9, 24);
+    const minimum = body.isMoon ? moonMinimum : massEarths > 10000 ? 24 : planetMinimum;
     return Math.max(minimum, Math.min(120, physical));
+  }
+
+  function bodyDisplayPoint(body) {
+    const physical = worldToScreen(body.x, body.y);
+    if (!body.isMoon) return physical;
+    const parent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
+    if (!parent) return physical;
+    const parentPoint = worldToScreen(parent.x, parent.y);
+    const dx = physical.x - parentPoint.x;
+    const dy = physical.y - parentPoint.y;
+    const actualDistance = Math.hypot(dx, dy);
+    const siblings = state.bodies
+      .filter((candidate) => candidate.isMoon && candidate.parentId === parent.id)
+      .sort((a, b) => Math.hypot(a.x - parent.x, a.y - parent.y) - Math.hypot(b.x - parent.x, b.y - parent.y));
+    const rank = Math.max(0, siblings.findIndex((candidate) => candidate.id === body.id));
+    const readableDistance = visualRadius(parent) + visualRadius(body) + 10 + rank * 7;
+    if (actualDistance >= readableDistance) return physical;
+    const angle = actualDistance > .001 ? Math.atan2(dy, dx) : body.id * 2.399;
+    return {
+      x: parentPoint.x + Math.cos(angle) * readableDistance,
+      y: parentPoint.y + Math.sin(angle) * readableDistance,
+    };
   }
 
   function drawOrbitGuides() {
@@ -727,6 +774,21 @@
       const a = liveOrbit.a;
       const e = liveOrbit.e || 0;
       if (!Number.isFinite(a) || a <= 0 || e >= 1) continue;
+      if (body.isMoon) {
+        const parentPoint = worldToScreen(parent.x, parent.y);
+        const displayPoint = bodyDisplayPoint(body);
+        const physicalPoint = worldToScreen(body.x, body.y);
+        const displayDistance = Math.hypot(displayPoint.x - parentPoint.x, displayPoint.y - parentPoint.y);
+        const physicalDistance = Math.hypot(physicalPoint.x - parentPoint.x, physicalPoint.y - parentPoint.y);
+        if (displayDistance > physicalDistance + 1) {
+          ctx.strokeStyle = body === selectedBody() || parent === selectedBody() ? "rgba(129,190,255,.34)" : "rgba(151,181,220,.13)";
+          ctx.lineWidth = body === selectedBody() ? 1.2 : .7;
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath(); ctx.arc(parentPoint.x, parentPoint.y, displayDistance, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]);
+          continue;
+        }
+      }
       const b = a * Math.sqrt(1 - e * e);
       if (a * state.camera.zoom < 3) continue;
       const angle = liveOrbit.angle || 0;
@@ -759,13 +821,41 @@
     }
   }
 
+  function drawMagnetosphere(body, radius) {
+    const strength = clamp(body.magneticScale ?? 1, 0, 100);
+    if (state.hoveredId !== body.id || strength <= 0) return;
+    const reach = radius * (1.45 + Math.sqrt(strength) * .58);
+    const opacity = .12 + Math.log10(strength + 1) / Math.log10(101) * .3;
+    ctx.save();
+    ctx.rotate(-.18);
+    ctx.globalCompositeOperation = "screen";
+    ctx.shadowColor = "rgba(72,157,255,.8)";
+    ctx.shadowBlur = Math.min(28, reach * .2);
+    for (let index = 0; index < 4; index++) {
+      const scale = .58 + index * .14;
+      ctx.strokeStyle = `rgba(72,157,255,${opacity * (1 - index * .13)})`;
+      ctx.lineWidth = Math.max(.7, 1.5 - index * .18);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, reach * scale, reach * scale * .48, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    const glow = ctx.createRadialGradient(0, 0, radius, 0, 0, reach);
+    glow.addColorStop(0, "rgba(67,151,255,.16)");
+    glow.addColorStop(.52, `rgba(58,139,255,${opacity * .28})`);
+    glow.addColorStop(1, "rgba(37,116,255,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.ellipse(0, 0, reach, reach * .52, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
   function drawBody(body) {
-    const p = worldToScreen(body.x, body.y);
+    const p = bodyDisplayPoint(body);
     const radius = visualRadius(body);
     if (p.x < -radius * 4 || p.x > state.viewport.width + radius * 4 || p.y < -radius * 4 || p.y > state.viewport.height + radius * 4) return;
 
     ctx.save();
     ctx.translate(p.x, p.y);
+    drawMagnetosphere(body, radius);
     if (body.texture === "sun") {
       const glow = ctx.createRadialGradient(0, 0, radius * .3, 0, 0, radius * 3.2);
       glow.addColorStop(0, `${body.color}88`);
@@ -809,8 +899,9 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     for (const body of [...state.bodies].sort((a, b) => b.mass - a.mass)) {
-      if (body.isMoon && (!body.orbit || body.orbit.a * state.camera.zoom < 20)) continue;
-      const p = worldToScreen(body.x, body.y);
+      const parent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
+      if (body.isMoon && parent !== selectedBody() && parent?.id !== state.hoveredId && body.id !== state.selectedId && body.id !== state.hoveredId && (!body.orbit || body.orbit.a * state.camera.zoom < 20)) continue;
+      const p = bodyDisplayPoint(body);
       const radius = visualRadius(body);
       if (p.x < -40 || p.x > state.viewport.width + 40 || p.y < -40 || p.y > state.viewport.height + 40) continue;
       const width = Math.max(28, ctx.measureText(body.name).width + 10);
@@ -1060,7 +1151,7 @@
   function drawMoveGuide() {
     const body = state.bodies.find((candidate) => candidate.id === state.grabbedBodyId);
     if (!body) return;
-    const point = worldToScreen(body.x, body.y);
+    const point = bodyDisplayPoint(body);
     const radius = visualRadius(body);
     const parent = body.parentId ? state.bodies.find((candidate) => candidate.id === body.parentId) : null;
     ctx.save();
@@ -1108,7 +1199,7 @@
     let found = null;
     let bestDistance = Infinity;
     for (const body of state.bodies) {
-      const p = worldToScreen(body.x, body.y);
+      const p = bodyDisplayPoint(body);
       const distance = Math.hypot(screenX - p.x, screenY - p.y);
       const hitRadius = Math.max(22, visualRadius(body) + 8);
       if (distance <= hitRadius && distance < bestDistance) { found = body; bestDistance = distance; }
@@ -1139,6 +1230,8 @@
     ui.bodyVelocityY.value = formatNumber(body.vy, 8);
     ui.gravityScale.value = Math.round(Math.sqrt(body.gravityScale) * 100);
     ui.gravityScaleValue.value = `${formatNumber(body.gravityScale, 2)}×`;
+    ui.magneticScale.value = body.magneticScale ?? 1;
+    ui.magneticScaleValue.value = `${formatNumber(body.magneticScale ?? 1, 1)}×`;
     const science = scienceByName[body.name] || body.science || scienceByType[body.scienceType] || scienceByType.rock;
     ui.bodyClass.textContent = science.className;
     ui.bodySummary.textContent = science.summary;
@@ -1148,13 +1241,17 @@
     ui.bodyDensity.textContent = science.density;
     const massEarths = body.mass * EARTHS_PER_SUN;
     const radiusEarths = body.collisionRadius / EARTH_RADIUS_AU;
+    const radiusKm = body.collisionRadius * KM_PER_AU;
     const surfaceGravity = massEarths * body.gravityScale / Math.max(radiusEarths ** 2, 1e-15);
     const escapeVelocity = 11.186 * Math.sqrt(massEarths * body.gravityScale / Math.max(radiusEarths, 1e-15));
     ui.bodySurfaceGravity.textContent = `${formatNumber(surfaceGravity, 2)} g`;
     ui.bodyEscapeVelocity.textContent = `${formatNumber(escapeVelocity, 1)} km/s`;
-    ui.bodyMagneticValue.textContent = science.magneticLabel;
-    ui.bodyMagneticNote.textContent = science.magneticNote;
-    ui.bodyMagneticMeter.style.width = `${science.magnetic <= 0 ? 2 : clamp(Math.log10(science.magnetic + 1) / Math.log10(15) * 100, 4, 100)}%`;
+    ui.bodyRadius.textContent = `${Math.round(radiusKm).toLocaleString()} km`;
+    const naturalMagneticField = Math.max(.01, science.magnetic || 0);
+    const magneticField = naturalMagneticField * (body.magneticScale ?? 1);
+    ui.bodyMagneticValue.textContent = (body.magneticScale ?? 1) <= 0 ? "Field off" : `${formatNumber(magneticField, 2)}× Earth`;
+    ui.bodyMagneticNote.textContent = `${science.magneticNote} Hover over the body to reveal its magnetosphere.`;
+    ui.bodyMagneticMeter.style.width = `${clamp(body.magneticScale ?? 1, 0, 100)}%`;
     ui.planetPreview.style.setProperty("--planet-color", body.color);
   }
 
@@ -1522,11 +1619,10 @@
   }
 
   function beginBodyDrag(body, screenX, screenY) {
-    const point = screenToWorld(screenX, screenY);
     state.grabbedBodyId = body.id;
     state.grabbedGroupIds = bodyGroupIds(body.id);
-    state.grabOffsetX = body.x - point.x;
-    state.grabOffsetY = body.y - point.y;
+    state.grabScreenX = screenX;
+    state.grabScreenY = screenY;
     state.resumeAfterMove = state.running;
     state.running = false;
     state.pointer.dragging = true;
@@ -1539,11 +1635,10 @@
   function moveGrabbedBody(screenX, screenY) {
     const body = state.bodies.find((candidate) => candidate.id === state.grabbedBodyId);
     if (!body) return;
-    const point = screenToWorld(screenX, screenY);
-    const nextX = point.x + state.grabOffsetX;
-    const nextY = point.y + state.grabOffsetY;
-    const dx = nextX - body.x;
-    const dy = nextY - body.y;
+    const dx = (screenX - state.grabScreenX) / state.camera.zoom;
+    const dy = (screenY - state.grabScreenY) / state.camera.zoom;
+    state.grabScreenX = screenX;
+    state.grabScreenY = screenY;
     for (const member of state.bodies) {
       if (!state.grabbedGroupIds.includes(member.id)) continue;
       member.x += dx;
@@ -1592,6 +1687,7 @@
 
   function bindEvents() {
     window.addEventListener("resize", resizeCanvas);
+    canvas.addEventListener("pointerleave", () => { state.hoveredId = null; });
     canvas.addEventListener("pointerdown", (event) => {
       canvas.setPointerCapture(event.pointerId);
       if (state.orbitPlacement) {
@@ -1619,6 +1715,7 @@
       else canvas.classList.add("dragging");
     });
     canvas.addEventListener("pointermove", (event) => {
+      state.hoveredId = bodyAt(event.offsetX, event.offsetY)?.id ?? null;
       if (state.orbitPlacement) {
         state.pointer.x = event.offsetX;
         state.pointer.y = event.offsetY;
@@ -1719,6 +1816,12 @@
       body.gravityScale = (Number(ui.gravityScale.value) / 100) ** 2;
       updateSelectionUI();
     });
+    ui.magneticScale.addEventListener("input", () => {
+      const body = selectedBody();
+      if (!body) return;
+      body.magneticScale = clamp(Number(ui.magneticScale.value), 0, 100);
+      updateSelectionUI();
+    });
     ui.trailLength.addEventListener("input", () => {
       state.trailLength = Number(ui.trailLength.value);
       ui.trailLengthValue.value = state.trailLength;
@@ -1730,7 +1833,15 @@
     });
 
     ui.bodyName.addEventListener("change", () => { const body = selectedBody(); if (body) { body.name = ui.bodyName.value.trim() || "Unnamed body"; updateSelectionUI(); renderSystemRoster(); } });
-    ui.bodyMass.addEventListener("change", () => { const body = selectedBody(); if (body) { body.mass = Math.max(1e-12, Number(ui.bodyMass.value)) / EARTHS_PER_SUN; renderSystemRoster(); } });
+    ui.bodyMass.addEventListener("change", () => {
+      const body = selectedBody();
+      const massEarths = Number(ui.bodyMass.value);
+      if (!body || !Number.isFinite(massEarths) || massEarths <= 0) { updateSelectionUI(); return; }
+      resizeBodyForMass(body, massEarths);
+      refreshOrbitalRelationships();
+      updateSelectionUI();
+      renderSystemRoster();
+    });
     ui.bodyColor.addEventListener("input", () => { const body = selectedBody(); if (body) { body.color = ui.bodyColor.value; ui.selectionDot.style.background = body.color; ui.planetPreview.style.setProperty("--planet-color", body.color); } });
     ui.bodyVelocityX.addEventListener("input", () => {
       const body = selectedBody();
