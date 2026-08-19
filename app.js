@@ -1677,6 +1677,50 @@
   }
 
   function drawLaunchPreview() {
+    if (state.addMode && state.launchMode === "autoOrbit") {
+      const mouseWorld = screenToWorld(state.pointer.x, state.pointer.y);
+      const { spec } = currentSpawnSpec();
+      const primary = findDominantGravityParent(mouseWorld.x, mouseWorld.y, spec.mass);
+      const mouseScreen = { x: state.pointer.x, y: state.pointer.y };
+      ctx.save();
+      if (primary) {
+        const primaryScreen = worldToScreen(primary.x, primary.y);
+        const dist = Math.hypot(mouseWorld.x - primary.x, mouseWorld.y - primary.y);
+        ctx.strokeStyle = "rgba(102, 198, 255, 0.75)";
+        ctx.setLineDash([6, 6]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(primaryScreen.x, primaryScreen.y, dist * state.camera.zoom, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(132, 191, 255, 0.4)";
+        ctx.beginPath();
+        ctx.moveTo(primaryScreen.x, primaryScreen.y);
+        ctx.lineTo(mouseScreen.x, mouseScreen.y);
+        ctx.stroke();
+
+        ctx.fillStyle = "#38bdf8";
+        ctx.beginPath();
+        ctx.arc(mouseScreen.x, mouseScreen.y, Math.max(6, spec.radius * state.camera.zoom * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.font = "600 11px Inter, sans-serif";
+        ctx.fillStyle = "rgba(194, 225, 255, 0.95)";
+        ctx.textAlign = "left";
+        ctx.fillText(`Auto-orbiting ${primary.name} (${formatDistance(dist)})`, mouseScreen.x + 14, mouseScreen.y - 8);
+      } else {
+        ctx.fillStyle = "#38bdf8";
+        ctx.beginPath();
+        ctx.arc(mouseScreen.x, mouseScreen.y, Math.max(6, spec.radius * state.camera.zoom * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = "600 11px Inter, sans-serif";
+        ctx.fillStyle = "rgba(194, 225, 255, 0.95)";
+        ctx.textAlign = "left";
+        ctx.fillText("Spawn object in deep space", mouseScreen.x + 14, mouseScreen.y - 8);
+      }
+      ctx.restore();
+      return;
+    }
     if (state.orbitPlacement) {
       const target = state.bodies.find((body) => body.id === state.launchTargetId);
       if (!target) return;
@@ -2045,19 +2089,126 @@
     return { minimum, maximum: maximumPeriapsis, stableRadius, roche, viable: maximumPeriapsis > minimum * 1.15 };
   }
 
+  function findDominantGravityParent(worldX, worldY, newMassEarths = 1) {
+    if (!state.bodies.length) return null;
+    let bestPrimary = null;
+    let maxPull = -1;
+
+    for (const candidate of state.bodies) {
+      if (candidate.mass <= 0) continue;
+      const dx = worldX - candidate.x;
+      const dy = worldY - candidate.y;
+      const distSq = dx * dx + dy * dy;
+      const dist = Math.sqrt(distSq);
+      if (dist < candidate.collisionRadius * 1.05) continue;
+      
+      const pairScale = (candidate.gravityScale ?? 1);
+      const pull = G * pairScale * candidate.mass / Math.max(distSq, 1e-10);
+      
+      if (pull > maxPull) {
+        maxPull = pull;
+        bestPrimary = candidate;
+      }
+    }
+    return bestPrimary;
+  }
+
+  function computeAutoOrbitVelocity(worldX, worldY, primary, newMassEarths = 1, prograde = true) {
+    if (!primary) return { vx: 0, vy: 0, distance: 0, speed: 0 };
+    const dx = worldX - primary.x;
+    const dy = worldY - primary.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance <= 0) return { vx: primary.vx, vy: primary.vy, distance: 0, speed: 0 };
+
+    const orbiterMass = Math.max(1e-12, newMassEarths) / EARTHS_PER_SUN;
+    const effectivePairMass = (primary.gravityScale ?? 1) * (primary.mass + orbiterMass);
+    const speed = Math.sqrt(G * effectivePairMass / distance);
+
+    const dir = prograde ? 1 : -1;
+    const vx = primary.vx - (dy / distance) * speed * dir;
+    const vy = primary.vy + (dx / distance) * speed * dir;
+
+    return { vx, vy, distance, speed };
+  }
+
+  function spawnAutoOrbitPlanet(worldX, worldY) {
+    if (state.bodies.length >= MAX_BODIES) {
+      toast(`Maximum of ${MAX_BODIES} bodies reached`);
+      return;
+    }
+    const { spec } = currentSpawnSpec();
+    const primary = findDominantGravityParent(worldX, worldY, spec.mass);
+    const prograde = ui.orbitDirection ? ui.orbitDirection.value !== "retrograde" : true;
+    
+    let spawnX = worldX;
+    let spawnY = worldY;
+    if (primary) {
+      const minDistance = primary.collisionRadius + spec.collisionRadius * 1.25;
+      const currentDist = Math.hypot(worldX - primary.x, worldY - primary.y);
+      if (currentDist < minDistance) {
+        const angle = Math.atan2(worldY - primary.y, worldX - primary.x);
+        spawnX = primary.x + Math.cos(angle) * minDistance;
+        spawnY = primary.y + Math.sin(angle) * minDistance;
+      }
+    }
+
+    const { vx, vy } = computeAutoOrbitVelocity(spawnX, spawnY, primary, spec.mass, prograde);
+    const isMoon = primary ? (primary.texture !== "sun" && !primary.parentId) : false;
+    
+    const newBody = makeBody({
+      ...spec,
+      name: `${spec.label || "New Planet"} ${state.idCounter}`,
+      x: spawnX,
+      y: spawnY,
+      vx: vx,
+      vy: vy,
+      parentId: primary ? primary.id : null,
+      isMoon: isMoon,
+      tidalImmune: isMoon,
+    });
+
+    state.bodies.push(newBody);
+    refreshOrbitalRelationships();
+    createEffect("shockwave", spawnX, spawnY, { color: newBody.color, radius: newBody.radius * 2.5 });
+    selectBody(newBody);
+    renderSystemRoster();
+    updateHUD();
+    toast(`Spawned ${newBody.name} in orbit around ${primary ? primary.name : "deep space"}`);
+  }
+
   function setLaunchMode(mode) {
     state.launchMode = mode;
-    const orbital = mode !== "impact";
+    ui.autoOrbitMode?.classList.toggle("active", mode === "autoOrbit");
     ui.impactMode.classList.toggle("active", mode === "impact");
     ui.orbitMode.classList.toggle("active", mode === "orbit");
     ui.binaryMode.classList.toggle("active", mode === "binary");
+    ui.autoOrbitMode?.setAttribute("aria-pressed", String(mode === "autoOrbit"));
     ui.impactMode.setAttribute("aria-pressed", String(mode === "impact"));
     ui.orbitMode.setAttribute("aria-pressed", String(mode === "orbit"));
     ui.binaryMode.setAttribute("aria-pressed", String(mode === "binary"));
-    ui.impactOptions.hidden = orbital;
-    ui.orbitOptions.hidden = !orbital;
-    ui.launchAtTarget.innerHTML = mode === "binary" ? "<span>∞</span> Place binary with mouse" : mode === "orbit" ? "<span>◉</span> Place orbit with mouse" : "<span>➤</span> Launch at selected target";
-    ui.launchNote.textContent = mode === "binary" ? "The new body is mass-matched and both objects are placed around their shared barycenter." : mode === "orbit" ? "After pressing the button, move the mouse around the target to set distance, then click to create the orbit." : "The object spawns outside the target and automatically aims toward it.";
+
+    ui.impactOptions.hidden = mode !== "impact";
+    ui.orbitOptions.hidden = mode === "impact";
+
+    if (ui.launchAtTarget) {
+      ui.launchAtTarget.innerHTML = mode === "autoOrbit"
+        ? "<span>✦</span> Click anywhere on screen to spawn"
+        : mode === "binary"
+        ? "<span>∞</span> Place binary with mouse"
+        : mode === "orbit"
+        ? "<span>◉</span> Place orbit around target"
+        : "<span>➤</span> Launch at selected target";
+    }
+
+    if (ui.launchNote) {
+      ui.launchNote.textContent = mode === "autoOrbit"
+        ? "Wherever your mouse goes on screen, a new planet will spawn and naturally orbit the nearest star or dominant planet!"
+        : mode === "binary"
+        ? "The new body is mass-matched and both objects are placed around their shared barycenter."
+        : mode === "orbit"
+        ? "After pressing the button, move the mouse around the target to set distance, then click to create the orbit."
+        : "The object spawns outside the target and automatically aims toward it.";
+    }
   }
 
   function beginOrbitPlacement() {
@@ -2192,6 +2343,7 @@
     ui.controlPanel.classList.remove("open");
     ui.mobilePanelButton.setAttribute("aria-label", "Open settings");
     state.launchTargetId = selectedBody()?.id || null;
+    setLaunchMode(state.launchMode || "autoOrbit");
     renderSystemRoster();
     ui.launchPanel.classList.add("open");
     ui.launchPanel.setAttribute("aria-hidden", "false");
@@ -2232,10 +2384,16 @@
       button.append(orb, copy, mass);
       ui.systemRoster.append(button);
     }
-    ui.launchAtTarget.disabled = !state.launchTargetId || !state.bodies.length;
+    ui.launchAtTarget.disabled = state.launchMode !== "autoOrbit" && (!state.launchTargetId || !state.bodies.length);
   }
 
   function launchAtSelectedTarget() {
+    if (state.launchMode === "autoOrbit") {
+      closeLauncher();
+      toggleAddMode(true);
+      toast("Click anywhere on screen to spawn a planet in orbit!");
+      return;
+    }
     const target = state.bodies.find((body) => body.id === state.launchTargetId);
     if (!target || state.bodies.length >= MAX_BODIES) {
       toast(target ? `Maximum of ${MAX_BODIES} bodies reached` : "Select a target first");
@@ -2482,7 +2640,15 @@
         return;
       }
       if (state.addMode && state.launchStart) {
-        createLaunchedBody(state.launchStart, screenToWorld(event.offsetX, event.offsetY));
+        if (state.launchMode === "autoOrbit") {
+          const world = screenToWorld(event.offsetX, event.offsetY);
+          spawnAutoOrbitPlanet(world.x, world.y);
+        } else {
+          createLaunchedBody(state.launchStart, screenToWorld(event.offsetX, event.offsetY));
+        }
+      } else if (event.shiftKey && !state.pointer.moved) {
+        const world = screenToWorld(event.offsetX, event.offsetY);
+        spawnAutoOrbitPlanet(world.x, world.y);
       } else if (!state.pointer.moved) {
         selectBody(bodyAt(event.offsetX, event.offsetY));
       }
@@ -2520,6 +2686,7 @@
     ui.newPlanetTop.addEventListener("click", openLauncher);
     ui.closeLauncher.addEventListener("click", closeLauncher);
     ui.launchAtTarget.addEventListener("click", launchAtSelectedTarget);
+    ui.autoOrbitMode?.addEventListener("click", () => setLaunchMode("autoOrbit"));
     ui.impactMode.addEventListener("click", () => setLaunchMode("impact"));
     ui.orbitMode.addEventListener("click", () => setLaunchMode("orbit"));
     ui.binaryMode.addEventListener("click", () => setLaunchMode("binary"));

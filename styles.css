@@ -129,8 +129,8 @@ input[type="color"] { width: 100%; height: 36px; padding: 3px; border: 1px solid
 .launch-header { display: flex; align-items: flex-start; justify-content: space-between; }
 .launch-header h2 { margin: 0; font-size: 26px; letter-spacing: -.04em; }
 .launch-intro { margin: 12px 0 18px; color: #718198; font-size: 11px; line-height: 1.55; }
-.launch-mode { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 14px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #070e19; }
-.launch-mode button { border-color: transparent; background: transparent; }
+.launch-mode { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 14px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #070e19; }
+.launch-mode button { border-color: transparent; background: transparent; padding: 0 4px; font-size: 10px; }
 .launch-mode button.active { color: #d8e8ff; border-color: rgba(105,168,255,.32); background: #14243a; }
 .launch-mode button span { margin-right: 4px; }
 .spawn-types { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
