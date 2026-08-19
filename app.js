@@ -823,7 +823,9 @@
         let dx = b.x - a.x;
         let dy = b.y - a.y;
         let distance = Math.hypot(dx, dy);
-        const collisionDistance = a.collisionRadius + b.collisionRadius;
+        const colA = a.texture === "sun" ? Math.max(a.collisionRadius, a.radius * 0.85) : a.collisionRadius;
+        const colB = b.texture === "sun" ? Math.max(b.collisionRadius, b.radius * 0.85) : b.collisionRadius;
+        const collisionDistance = colA + colB;
         const previousDx = (b.prevX ?? b.x) - (a.prevX ?? a.x);
         const previousDy = (b.prevY ?? b.y) - (a.prevY ?? a.y);
         const segmentX = dx - previousDx;
@@ -1260,9 +1262,9 @@
       const parent = state.bodies.find((candidate) => candidate.id === body.orbit.parentId);
       if (!parent) continue;
       const liveOrbit = osculatingOrbit(body, parent) || body.orbit;
-      const a = liveOrbit.a;
-      const e = liveOrbit.e || 0;
-      if (!Number.isFinite(a) || a <= 0 || e >= 1) continue;
+      const a = Number.isFinite(liveOrbit.a) && liveOrbit.a > 0 ? liveOrbit.a : body.orbit.a;
+      if (!Number.isFinite(a) || a <= 0) continue;
+      const e = clamp(liveOrbit.e ?? body.orbit.e ?? 0, 0, .88);
       if (body.isMoon) {
         const parentPoint = worldToScreen(parent.x, parent.y);
         const displayPoint = bodyDisplayPoint(body);
@@ -1280,15 +1282,16 @@
       }
       const b = a * Math.sqrt(1 - e * e);
       if (a * state.camera.zoom < 3) continue;
-      const angle = liveOrbit.angle || 0;
+      const angle = liveOrbit.angle || body.orbit.angle || 0;
       const center = worldToScreen(parent.x - Math.cos(angle) * a * e, parent.y - Math.sin(angle) * a * e);
-      ctx.strokeStyle = body.isMoon ? "rgba(151,181,220,.16)" : "rgba(104,155,224,.2)";
-      ctx.lineWidth = body === selectedBody() ? 1.2 : .7;
+      ctx.save();
+      ctx.strokeStyle = body.isMoon ? "rgba(151,181,220,.18)" : body.name.includes("Mercury") ? "rgba(180,170,160,.45)" : "rgba(104,155,224,.24)";
+      ctx.lineWidth = body === selectedBody() ? 1.4 : .8;
       ctx.setLineDash(body === selectedBody() ? [5, 4] : []);
       ctx.beginPath();
       ctx.ellipse(center.x, center.y, a * state.camera.zoom, b * state.camera.zoom, angle, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.setLineDash([]);
+      ctx.restore();
     }
   }
 
@@ -1375,20 +1378,30 @@
 
   function drawTrails() {
     if (!state.showTrails) return;
+    ctx.save();
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     for (const body of state.bodies) {
       if (body.trail.length < 2) continue;
+      const points = body.trail.map((pt) => worldToScreen(pt.x, pt.y));
       ctx.beginPath();
-      body.trail.forEach((point, index) => {
-        const p = worldToScreen(point.x, point.y);
-        if (index === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-      });
-      ctx.globalAlpha = .42;
+      ctx.moveTo(points[0].x, points[0].y);
+      if (points.length === 2) {
+        ctx.lineTo(points[1].x, points[1].y);
+      } else {
+        for (let i = 1; i < points.length - 1; i++) {
+          const xc = (points[i].x + points[i + 1].x) / 2;
+          const yc = (points[i].y + points[i + 1].y) / 2;
+          ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+        }
+        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+      }
+      ctx.globalAlpha = .48;
       ctx.strokeStyle = body.color;
-      ctx.lineWidth = 1.15;
+      ctx.lineWidth = 1.35;
       ctx.stroke();
-      ctx.globalAlpha = 1;
     }
+    ctx.restore();
   }
 
   function drawMagnetosphere(body, radius) {
