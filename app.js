@@ -1691,9 +1691,9 @@
     drawMagnetosphere(body, radius);
     if (body.texture === "sun" || body.scienceType === "star") {
       const glow = ctx.createRadialGradient(0, 0, radius * .3, 0, 0, radius * 3.2);
-      glow.addColorStop(0, `${body.color}88`);
-      glow.addColorStop(.25, `${body.color}3d`);
-      glow.addColorStop(1, `${body.color}00`);
+      glow.addColorStop(0, rgbaColor(body.color, 0.55));
+      glow.addColorStop(.25, rgbaColor(body.color, 0.24));
+      glow.addColorStop(1, rgbaColor(body.color, 0));
       ctx.fillStyle = glow;
       ctx.beginPath(); ctx.arc(0, 0, radius * 3.2, 0, Math.PI * 2); ctx.fill();
       drawSolarProminences(body, radius);
@@ -1924,9 +1924,9 @@
 
     const hGrad = ctx.createLinearGradient(-spikeLength * 2.2, 0, spikeLength * 2.2, 0);
     hGrad.addColorStop(0, "rgba(80, 160, 255, 0)");
-    hGrad.addColorStop(0.35, `${color}44`);
+    hGrad.addColorStop(0.35, rgbaColor(color, 0.35));
     hGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.92)");
-    hGrad.addColorStop(0.65, `${color}44`);
+    hGrad.addColorStop(0.65, rgbaColor(color, 0.35));
     hGrad.addColorStop(1, "rgba(80, 160, 255, 0)");
 
     ctx.strokeStyle = hGrad;
@@ -2007,8 +2007,8 @@
       const alpha = clamp(p.life / p.maxLife, 0, 1);
       const grad = ctx.createRadialGradient(screenPos.x, screenPos.y, 0, screenPos.x, screenPos.y, p.size * 3.5);
       grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-      grad.addColorStop(0.3, p.color || "#ffb13b");
-      grad.addColorStop(0.7, "rgba(249, 115, 22, 0.4)");
+      grad.addColorStop(0.3, rgbaColor(p.color, 0.85));
+      grad.addColorStop(0.7, rgbaColor(p.color, 0.35));
       grad.addColorStop(1, "rgba(0, 0, 0, 0)");
 
       ctx.globalAlpha = alpha;
@@ -2253,19 +2253,23 @@
   }
 
   function render() {
-    drawBackground();
-    drawGrid();
-    drawEvolutionEffects();
-    drawOrbitGuides();
-    drawRocheZones();
-    drawTrails();
-    [...state.bodies].sort((a, b) => a.mass - b.mass).forEach(drawBody);
-    drawCMEParticles();
-    drawBinaryBarycenters();
-    drawMoveGuide();
-    drawLabels();
-    drawEffects();
-    drawLaunchPreview();
+    try {
+      drawBackground();
+      drawGrid();
+      drawEvolutionEffects();
+      drawOrbitGuides();
+      drawRocheZones();
+      drawTrails();
+      [...state.bodies].sort((a, b) => a.mass - b.mass).forEach(drawBody);
+      drawCMEParticles();
+      drawBinaryBarycenters();
+      drawMoveGuide();
+      drawLabels();
+      drawEffects();
+      drawLaunchPreview();
+    } catch (err) {
+      console.error("Rendering error:", err);
+    }
   }
 
   function frame(now) {
@@ -3122,6 +3126,15 @@
       cancelOrbitPlacement(); toggleMoveMode(false); state.bodies = []; state.effects = []; state.selectedId = null; state.simYears = 0; updateSelectionUI(); renderSystemRoster(); toast("Universe cleared");
     });
     ui.fitView.addEventListener("click", () => fitView());
+    ui.fitViewTopBtn?.addEventListener("click", () => fitView());
+    ui.zoomInBtn?.addEventListener("click", () => {
+      state.followBodyId = null;
+      state.camera.zoom = clamp(state.camera.zoom * 1.35, 1.5, 250000);
+    });
+    ui.zoomOutBtn?.addEventListener("click", () => {
+      state.followBodyId = null;
+      state.camera.zoom = clamp(state.camera.zoom / 1.35, 1.5, 250000);
+    });
     ui.moveBodyMode.addEventListener("click", () => toggleMoveMode());
     ui.toggleMoonsBtn?.addEventListener("click", () => toggleMoons());
     ui.addBody.addEventListener("click", openLauncher);
@@ -3324,13 +3337,40 @@
 
   function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
   function randomColor() { return ["#7eb7ff", "#e68d60", "#9b83e8", "#72d6c5", "#d8b76f"][Math.floor(Math.random() * 5)]; }
-  function normalizeHex(color) { return /^#[0-9a-f]{6}$/i.test(color) ? color : "#9cb8d8"; }
+  function normalizeHex(color) {
+    if (!color || typeof color !== "string") return "#9cb8d8";
+    if (color.startsWith("#")) {
+      const clean = color.trim().toLowerCase();
+      if (clean.length === 7) return clean;
+      if (clean.length === 4) return `#${clean[1]}${clean[1]}${clean[2]}${clean[2]}${clean[3]}${clean[3]}`;
+    }
+    if (color.startsWith("rgb")) {
+      const match = color.match(/\d+/g);
+      if (match && match.length >= 3) {
+        const hex = (x) => parseInt(x, 10).toString(16).padStart(2, "0");
+        return `#${hex(match[0])}${hex(match[1])}${hex(match[2])}`;
+      }
+    }
+    return "#9cb8d8";
+  }
+
+  function rgbaColor(hexOrRgb, alpha = 1) {
+    const hex = normalizeHex(hexOrRgb);
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const validR = Number.isNaN(r) ? 255 : r;
+    const validG = Number.isNaN(g) ? 255 : g;
+    const validB = Number.isNaN(b) ? 255 : b;
+    return `rgba(${validR}, ${validG}, ${validB}, ${clamp(alpha, 0, 1)})`;
+  }
+
   function lighten(hex, amount) { return mixColor(hex, "#ffffff", amount); }
   function darken(hex, amount) { return mixColor(hex, "#000000", amount); }
   function mixColor(a, b, amount) {
     const parse = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
     const [ar, ag, ab] = parse(normalizeHex(a));
-    const [br, bg, bb] = parse(b);
+    const [br, bg, bb] = parse(normalizeHex(b));
     return `rgb(${Math.round(ar + (br - ar) * amount)},${Math.round(ag + (bg - ag) * amount)},${Math.round(ab + (bb - ab) * amount)})`;
   }
 

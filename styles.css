@@ -182,14 +182,51 @@ dialog h2 { margin: 0 0 22px; font-size: 25px; letter-spacing: -.03em; }
 kbd { min-width: 44px; padding: 5px 7px; color: #bdd7ff; text-align: center; border: 1px solid #314461; border-radius: 5px; background: #101b2b; box-shadow: inset 0 -2px #080e18; }
 .dialog-note { margin: 18px 0 0; color: #61718a; font-size: 11px; line-height: 1.5; }
 
-@media (max-width: 760px) {
+.hud-zoom-controls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.icon-hud-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #bfdbfe;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(148, 177, 230, 0.25);
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+}
+
+.icon-hud-btn:hover {
+  background: rgba(30, 58, 138, 0.7);
+  border-color: rgba(96, 165, 250, 0.6);
+  color: #ffffff;
+}
+
+.mobile-panel-button {
+  display: none;
+  background: linear-gradient(135deg, #2563eb, #0284c7);
+  color: #ffffff;
+  border-color: rgba(96, 165, 250, 0.6);
+  box-shadow: 0 0 16px rgba(37, 99, 235, 0.45);
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
   html, body, .app-shell { height: 100dvh; }
   .app-shell { display: block; }
   .simulation-stage { width: 100%; height: 100dvh; }
   .control-panel { position: fixed; inset: 0 auto 0 0; width: min(322px, 88vw); height: 100dvh; transform: translateX(-102%); transition: transform .25s ease; }
   .control-panel.open { transform: translateX(0); }
   .mobile-settings-close { position: absolute; z-index: 4; top: 12px; right: 12px; display: block; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 25px; background: rgba(4,10,20,.82); backdrop-filter: blur(10px); }
-  .mobile-panel-button { display: block; width: 44px; padding: 0; }
+  .mobile-panel-button { display: flex; align-items: center; justify-content: center; width: 44px; padding: 0; font-size: 18px; }
   .new-planet-top { min-width: 44px; width: 44px; padding: 0; font-size: 0; }
   .new-planet-top span { font-size: 20px; }
   .top-hud { left: 12px; right: 12px; top: 12px; }
