@@ -353,3 +353,25 @@ kbd { min-width: 44px; padding: 5px 7px; color: #bdd7ff; text-align: center; bor
   background: linear-gradient(135deg, #93c5fd, #7dd3fc);
 }
 
+.action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fef08a;
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.25), rgba(245, 158, 11, 0.25));
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  border-radius: 8px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+}
+
+.action-button:hover {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.45), rgba(245, 158, 11, 0.45));
+  border-color: rgba(251, 191, 36, 0.8);
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.35);
+  transform: translateY(-1px);
+}
+

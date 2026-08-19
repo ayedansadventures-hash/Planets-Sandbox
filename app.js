@@ -35,6 +35,169 @@
   milkyWayPhoto.decoding = "async";
   milkyWayPhoto.src = "assets/nasa/milky-way-1920.jpg";
 
+  const SoundEngine = (() => {
+    let ctx = null;
+    let masterGain = null;
+    let spaceDroneNode = null;
+    let isMuted = false;
+    let initialized = false;
+
+    function init() {
+      if (initialized) return;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      try {
+        ctx = new AudioCtx();
+        masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(0.28, ctx.currentTime);
+        masterGain.connect(ctx.destination);
+        startSpaceDrone();
+        initialized = true;
+      } catch {
+        // AudioContext not allowed before user gesture
+      }
+    }
+
+    function unlock() {
+      if (!initialized) init();
+      if (ctx && ctx.state === "suspended") {
+        ctx.resume();
+      }
+    }
+
+    function toggleMute(muted) {
+      isMuted = muted !== undefined ? muted : !isMuted;
+      if (!masterGain || !ctx) return isMuted;
+      masterGain.gain.setTargetAtTime(isMuted ? 0 : 0.28, ctx.currentTime, 0.05);
+      return isMuted;
+    }
+
+    function startSpaceDrone() {
+      if (!ctx || spaceDroneNode) return;
+      try {
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const filter = ctx.createBiquadFilter();
+        const droneGain = ctx.createGain();
+
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(43.65, ctx.currentTime);
+        osc2.type = "triangle";
+        osc2.frequency.setValueAtTime(43.95, ctx.currentTime);
+
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(110, ctx.currentTime);
+        droneGain.gain.setValueAtTime(0.1, ctx.currentTime);
+
+        osc1.connect(filter);
+        osc2.connect(filter);
+        filter.connect(droneGain);
+        droneGain.connect(masterGain);
+
+        osc1.start();
+        osc2.start();
+        spaceDroneNode = { osc1, osc2, droneGain };
+      } catch {}
+    }
+
+    function playImpact(intensity = 1.0) {
+      if (!ctx || isMuted) return;
+      unlock();
+      const now = ctx.currentTime;
+      try {
+        const subOsc = ctx.createOscillator();
+        const subGain = ctx.createGain();
+        subOsc.type = "sine";
+        subOsc.frequency.setValueAtTime(120 * clamp(intensity, 0.6, 2.5), now);
+        subOsc.frequency.exponentialRampToValueAtTime(26, now + 0.45);
+
+        subGain.gain.setValueAtTime(0.65 * Math.min(1.4, intensity), now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+        subOsc.connect(subGain);
+        subGain.connect(masterGain);
+
+        subOsc.start(now);
+        subOsc.stop(now + 0.9);
+
+        const bufferSize = Math.floor(ctx.sampleRate * 0.22);
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const noiseFilter = ctx.createBiquadFilter();
+        noiseFilter.type = "bandpass";
+        noiseFilter.frequency.setValueAtTime(550, now);
+        noiseFilter.frequency.exponentialRampToValueAtTime(110, now + 0.22);
+
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.35 * intensity, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(masterGain);
+
+        noise.start(now);
+      } catch {}
+    }
+
+    function playSolarFlare() {
+      if (!ctx || isMuted) return;
+      unlock();
+      const now = ctx.currentTime;
+      try {
+        const osc = ctx.createOscillator();
+        const filter = ctx.createBiquadFilter();
+        const gain = ctx.createGain();
+
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(170, now);
+        osc.frequency.exponentialRampToValueAtTime(42, now + 1.6);
+
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(340, now);
+        filter.Q.setValueAtTime(3.5, now);
+
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.22, now + 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.0);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(masterGain);
+
+        osc.start(now);
+        osc.stop(now + 2.1);
+      } catch {}
+    }
+
+    function playOrbitPlacement() {
+      if (!ctx || isMuted) return;
+      unlock();
+      const now = ctx.currentTime;
+      try {
+        [523.25, 783.99].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, now + idx * 0.04);
+
+          gain.gain.setValueAtTime(0.16, now + idx * 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.75 + idx * 0.1);
+
+          osc.connect(gain);
+          gain.connect(masterGain);
+          osc.start(now + idx * 0.04);
+          osc.stop(now + 0.85 + idx * 0.1);
+        });
+      } catch {}
+    }
+
+    return { init, unlock, toggleMute, playImpact, playSolarFlare, playOrbitPlacement };
+  })();
+
   const ui = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
   const state = {
     bodies: [],
@@ -51,6 +214,12 @@
     showGrid: true,
     showVelocity: false,
     showOrbits: true,
+    solarFlaresEnabled: true,
+    lensFlaresEnabled: true,
+    auroraEnabled: true,
+    audioEnabled: true,
+    flareCooldown: 2.0,
+    cmeParticles: [],
     camera: { x: 0, y: 0, zoom: 30 },
     followBodyId: null,
     pointer: { x: 0, y: 0, downX: 0, downY: 0, worldX: 0, worldY: 0, dragging: false, moved: false },
@@ -926,15 +1095,6 @@
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = (.08 + Math.random() * .32) * intensity;
-      state.effects.push({
-        kind: i % 3 === 0 ? "spark" : "fragment", x, y,
-        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-        rotation: Math.random() * Math.PI, spin: (Math.random() - .5) * 8,
-        life: 2 + Math.random() * 2.2, maxLife: 4.2,
-        size: 3 + Math.random() * 6 * intensity,
-        color: Math.random() > .5 ? a.color : b.color,
-      });
-    }
     const gasCount = gasImpact ? Math.round(24 * intensity) : Math.round(7 * intensity);
     for (let i = 0; i < gasCount; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -942,6 +1102,7 @@
       state.effects.push({ kind: "gas", x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 2.4 + Math.random() * 2.4, maxLife: 4.8, size: 14 + Math.random() * 22 * intensity, color: Math.random() > .5 ? a.color : b.color });
     }
     if (state.effects.length > 320) state.effects.splice(0, state.effects.length - 320);
+    SoundEngine.playImpact(intensity);
   }
 
   function resolveTidalDisruptions(dt) {
@@ -958,27 +1119,29 @@
         const b = state.bodies[j];
         const primary = a.mass >= b.mass ? a : b;
         const vulnerable = primary === a ? b : a;
-        if (vulnerable.tidalImmune || primary.mass < vulnerable.mass * 12) continue;
-        const distance = Math.hypot(primary.x - vulnerable.x, primary.y - vulnerable.y);
-        const roche = rocheLimit(primary, vulnerable.mass, vulnerable.collisionRadius, vulnerable.gravityScale);
-        if (distance >= roche || (distance <= primary.collisionRadius + vulnerable.collisionRadius && vulnerable.tidalStress < 1)) continue;
-        const penetration = clamp(1 - distance / roche, 0, 1);
+        if (vulnerable.tidalImmune) continue;
+        const dist = Math.hypot(b.x - a.x, b.y - a.y);
+        const limit = rocheLimit(primary, vulnerable.mass, vulnerable.collisionRadius, vulnerable.gravityScale);
+        if (dist > limit) continue;
+        const severity = clamp((limit - dist) / Math.max(limit, 1e-9), 0, 1);
         vulnerable.tidalPrimaryId = primary.id;
-        const previousStage = Math.floor((vulnerable.tidalStress ?? 0) * 5);
-        vulnerable.tidalStress = clamp((vulnerable.tidalStress ?? 0) + elapsedDays * (.035 + penetration * .3), 0, 1);
-        const nextStage = Math.floor(vulnerable.tidalStress * 5);
-        if (nextStage > previousStage && nextStage < 5) {
-          const angle = Math.atan2(vulnerable.y - primary.y, vulnerable.x - primary.x);
-          for (let shard = 0; shard < 5; shard++) {
-            const scatter = angle + (Math.random() - .5) * 1.1;
-            state.effects.push({
-              kind: "fragment", x: vulnerable.x, y: vulnerable.y,
-              vx: vulnerable.vx + Math.cos(scatter) * (.03 + Math.random() * .08),
-              vy: vulnerable.vy + Math.sin(scatter) * (.03 + Math.random() * .08),
-              rotation: Math.random() * Math.PI, spin: (Math.random() - .5) * 9,
-              life: 2.2, maxLife: 2.2, size: 3 + Math.random() * 5, color: vulnerable.color,
-            });
-          }
+        vulnerable.tidalStress = clamp((vulnerable.tidalStress ?? 0) + elapsedDays * (.08 + severity * .22), 0, 1);
+        if (Math.random() < .45) {
+          const kick = .015 + Math.random() * .035;
+          const angle = Math.atan2(vulnerable.y - primary.y, vulnerable.x - primary.x) + (Math.random() - .5) * 1.2;
+          state.effects.push({
+            kind: "fragment",
+            x: vulnerable.x,
+            y: vulnerable.y,
+            vx: vulnerable.vx + Math.cos(angle) * kick,
+            vy: vulnerable.vy + Math.sin(angle) * kick,
+            rotation: Math.random() * Math.PI,
+            spin: (Math.random() - .5) * 6,
+            life: 1.6 + Math.random() * 1.8,
+            maxLife: 3.4,
+            size: 2 + Math.random() * 3,
+            color: vulnerable.color,
+          });
         }
         if (vulnerable.tidalStress < 1) continue;
         const available = Math.min(7, MAX_BODIES - state.bodies.length + 1);
@@ -1011,32 +1174,29 @@
           vx: mean.vx + offset.vx / available,
           vy: mean.vy + offset.vy / available,
         }), { x: 0, y: 0, vx: 0, vy: 0 });
-        for (let index = 0; index < available; index++) {
-          const offset = offsets[index];
-          fragments.push(makeBody({
-            name: `${vulnerable.name} fragment ${index + 1}`,
+        for (let k = 0; k < available; k++) {
+          const offset = offsets[k];
+          const fragment = makeBody({
+            name: `${vulnerable.name} Ring Fragment ${k + 1}`,
             mass: fragmentMassEarths,
             radius: fragmentVisualRadius,
             collisionRadius: fragmentCollisionRadius,
             color: vulnerable.color,
-            texture: vulnerable.texture,
-            scienceType: vulnerable.scienceType,
-            x: vulnerable.x + offset.x - meanOffset.x,
-            y: vulnerable.y + offset.y - meanOffset.y,
-            vx: vulnerable.vx + offset.vx - meanOffset.vx,
-            vy: vulnerable.vy + offset.vy - meanOffset.vy,
-            tidalImmune: true,
-            gravityScale: vulnerable.gravityScale,
-            magneticScale: vulnerable.magneticScale,
-          }));
+            texture: "rock",
+            scienceType: "rock",
+            x: vulnerable.x + (offset.x - meanOffset.x),
+            y: vulnerable.y + (offset.y - meanOffset.y),
+            vx: vulnerable.vx + (offset.vx - meanOffset.vx),
+            vy: vulnerable.vy + (offset.vy - meanOffset.vy),
+          });
+          fragment.parentId = primary.id;
+          fragment.orbit = osculatingOrbit(fragment, primary);
+          fragment.tidalImmune = true;
+          fragments.push(fragment);
+          state.bodies.push(fragment);
         }
         spawnImpactEffect(primary, vulnerable, vulnerable.x, vulnerable.y);
-        state.bodies.splice(state.bodies.indexOf(vulnerable), 1, ...fragments);
-        for (const body of state.bodies) {
-          if (body.parentId === vulnerable.id) body.parentId = fragments[0].id;
-          if (body.orbit?.parentId === vulnerable.id) body.orbit = { ...body.orbit, parentId: fragments[0].id };
-          if (body.binaryPartnerId === vulnerable.id) body.binaryPartnerId = null;
-        }
+        state.bodies.splice(state.bodies.indexOf(vulnerable), 1);
         if (state.selectedId === vulnerable.id) state.selectedId = fragments[0].id;
         if (state.followBodyId === vulnerable.id) state.followBodyId = fragments[0].id;
         if (state.launchTargetId === vulnerable.id) state.launchTargetId = fragments[0].id;
@@ -1063,6 +1223,91 @@
       if (effect.kind === "gas") effect.size += 7 * realSeconds;
     }
     state.effects = state.effects.filter((effect) => effect.life > 0);
+  }
+
+  function updateSolarPhenomena(dt) {
+    if (!state.solarFlaresEnabled) return;
+    state.flareCooldown -= dt;
+
+    const stars = state.bodies.filter((b) => b.texture === "sun" || b.scienceType === "star" || b.mass * EARTHS_PER_SUN > 10000);
+    for (const star of stars) {
+      if (!star.prominences) star.prominences = [];
+
+      if (Math.random() < 0.045) {
+        star.prominences.push({
+          baseAngle: Math.random() * Math.PI * 2,
+          span: 0.2 + Math.random() * 0.45,
+          height: 1.15 + Math.random() * 0.38,
+          life: 2.5 + Math.random() * 3.5,
+          maxLife: 6.0,
+          pulseSpeed: 1.5 + Math.random() * 2.0,
+        });
+      }
+
+      for (let i = star.prominences.length - 1; i >= 0; i--) {
+        star.prominences[i].life -= dt;
+        if (star.prominences[i].life <= 0) star.prominences.splice(i, 1);
+      }
+
+      if (state.flareCooldown <= 0) {
+        triggerSolarFlare(star);
+        state.flareCooldown = 3.5 + Math.random() * 6.5;
+      }
+    }
+
+    for (let i = state.cmeParticles.length - 1; i >= 0; i--) {
+      const p = state.cmeParticles[i];
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      for (const body of state.bodies) {
+        if (body.id === p.originId) continue;
+        const dx = body.x - p.x;
+        const dy = body.y - p.y;
+        const dist = Math.hypot(dx, dy);
+        const magnetosphereDist = (body.collisionRadius || 0.001) * (2.0 + Math.sqrt(body.magneticScale ?? 1) * 3.5);
+
+        if (dist <= magnetosphereDist) {
+          body.auroraExcitement = Math.min(1.0, (body.auroraExcitement || 0) + 0.45);
+          p.life = 0;
+          break;
+        }
+      }
+
+      if (p.life <= 0) {
+        state.cmeParticles.splice(i, 1);
+      }
+    }
+  }
+
+  function triggerSolarFlare(targetStar) {
+    const star = targetStar || state.bodies.find((b) => b.texture === "sun" || b.scienceType === "star") || state.bodies[0];
+    if (!star) return;
+
+    const burstAngle = Math.random() * Math.PI * 2;
+    const burstCount = 42;
+    const baseSpeed = 4.8 + Math.random() * 3.2;
+
+    for (let i = 0; i < burstCount; i++) {
+      const spread = (Math.random() - 0.5) * 0.72;
+      const speed = baseSpeed * (0.75 + Math.random() * 0.5);
+      const angle = burstAngle + spread;
+      state.cmeParticles.push({
+        x: star.x + Math.cos(angle) * (star.collisionRadius * 1.6),
+        y: star.y + Math.sin(angle) * (star.collisionRadius * 1.6),
+        vx: star.vx + Math.cos(angle) * speed,
+        vy: star.vy + Math.sin(angle) * speed,
+        life: 5.5 + Math.random() * 4.0,
+        maxLife: 9.5,
+        size: 2.0 + Math.random() * 3.5,
+        color: star.color || "#ffb13b",
+        originId: star.id,
+      });
+    }
+
+    if (state.cmeParticles.length > 250) state.cmeParticles.splice(0, state.cmeParticles.length - 250);
+    SoundEngine.playSolarFlare();
   }
 
   function closestEncounterStep() {
@@ -1444,13 +1689,14 @@
       ctx.scale(1 + body.tidalStress * .95, Math.max(.48, 1 - body.tidalStress * .42));
     }
     drawMagnetosphere(body, radius);
-    if (body.texture === "sun") {
+    if (body.texture === "sun" || body.scienceType === "star") {
       const glow = ctx.createRadialGradient(0, 0, radius * .3, 0, 0, radius * 3.2);
       glow.addColorStop(0, `${body.color}88`);
       glow.addColorStop(.25, `${body.color}3d`);
       glow.addColorStop(1, `${body.color}00`);
       ctx.fillStyle = glow;
       ctx.beginPath(); ctx.arc(0, 0, radius * 3.2, 0, Math.PI * 2); ctx.fill();
+      drawSolarProminences(body, radius);
     }
     if (body.ring) drawRing(body, radius, true);
     const sphere = ctx.createRadialGradient(-radius * .33, -radius * .38, radius * .06, 0, 0, radius * 1.05);
@@ -1463,11 +1709,12 @@
     ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.clip();
     if (!drawNasaTexture(body, radius)) drawTexture(body, radius);
     ctx.restore();
-    drawAtmosphere(body, radius);
+    drawAtmosphereAndAurora(body, radius);
     if (body.ring) drawRing(body, radius, false);
     ctx.strokeStyle = "rgba(255,255,255,.22)";
     ctx.lineWidth = .7;
     ctx.beginPath(); ctx.arc(0, 0, radius - .3, 0, Math.PI * 2); ctx.stroke();
+    drawStarDiffractionSpikes(body, radius, p);
     if (state.selectedId === body.id) {
       ctx.strokeStyle = "rgba(115,183,255,.88)";
       ctx.lineWidth = 1.4;
@@ -1629,15 +1876,154 @@
     }
   }
 
-  function drawAtmosphere(body, radius) {
-    const style = atmosphereStyles[body.texture];
-    if (!style || radius < 5) return;
+  function drawSolarProminences(star, radius) {
+    if (!state.solarFlaresEnabled || !star.prominences || star.prominences.length === 0) return;
     ctx.save();
-    ctx.strokeStyle = style[0];
-    ctx.lineWidth = Math.max(.7, radius * style[1]);
-    ctx.shadowColor = style[0];
-    ctx.shadowBlur = Math.max(2, radius * .18);
-    ctx.beginPath(); ctx.arc(0, 0, radius + ctx.lineWidth * .45, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalCompositeOperation = "screen";
+    const time = performance.now() * 0.002;
+
+    for (const prom of star.prominences) {
+      const alpha = Math.sin((prom.life / prom.maxLife) * Math.PI);
+      const a1 = prom.baseAngle;
+      const a2 = prom.baseAngle + prom.span;
+      const midAngle = (a1 + a2) / 2;
+
+      const p1x = Math.cos(a1) * radius;
+      const p1y = Math.sin(a1) * radius;
+      const p2x = Math.cos(a2) * radius;
+      const p2y = Math.sin(a2) * radius;
+
+      const h = radius * prom.height + Math.sin(time * prom.pulseSpeed) * 3;
+      const cpx = Math.cos(midAngle) * h * 1.3;
+      const cpy = Math.sin(midAngle) * h * 1.3;
+
+      ctx.strokeStyle = `rgba(255, 135, 35, ${alpha * 0.75})`;
+      ctx.lineWidth = Math.max(1.8, radius * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(p1x, p1y);
+      ctx.quadraticCurveTo(cpx, cpy, p2x, p2y);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(255, 245, 190, ${alpha * 0.95})`;
+      ctx.lineWidth = Math.max(0.8, radius * 0.035);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawStarDiffractionSpikes(star, radius, p) {
+    if (!state.lensFlaresEnabled) return;
+    const isStar = star.texture === "sun" || star.scienceType === "star" || star.mass * EARTHS_PER_SUN > 10000;
+    if (!isStar) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+
+    const spikeLength = Math.max(35, radius * 3.6);
+    const color = star.color || "#ffb13b";
+
+    const hGrad = ctx.createLinearGradient(-spikeLength * 2.2, 0, spikeLength * 2.2, 0);
+    hGrad.addColorStop(0, "rgba(80, 160, 255, 0)");
+    hGrad.addColorStop(0.35, `${color}44`);
+    hGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.92)");
+    hGrad.addColorStop(0.65, `${color}44`);
+    hGrad.addColorStop(1, "rgba(80, 160, 255, 0)");
+
+    ctx.strokeStyle = hGrad;
+    ctx.lineWidth = Math.max(1.2, radius * 0.07);
+    ctx.beginPath();
+    ctx.moveTo(-spikeLength * 2.2, 0);
+    ctx.lineTo(spikeLength * 2.2, 0);
+    ctx.stroke();
+
+    const angles = [0, Math.PI / 2, Math.PI / 4, -Math.PI / 4];
+    for (let i = 0; i < angles.length; i++) {
+      const ang = angles[i];
+      const len = i < 2 ? spikeLength * 1.3 : spikeLength * 0.65;
+      const width = i < 2 ? 1.4 : 0.75;
+
+      const grad = ctx.createLinearGradient(-Math.cos(ang) * len, -Math.sin(ang) * len, Math.cos(ang) * len, Math.sin(ang) * len);
+      grad.addColorStop(0, "rgba(255, 255, 255, 0)");
+      grad.addColorStop(0.5, "rgba(255, 255, 255, 0.85)");
+      grad.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(-Math.cos(ang) * len, -Math.sin(ang) * len);
+      ctx.lineTo(Math.cos(ang) * len, Math.sin(ang) * len);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawAtmosphereAndAurora(body, radius) {
+    if (!state.auroraEnabled) return;
+    const style = atmosphereStyles[body.texture];
+    if (style && radius >= 5) {
+      ctx.save();
+      ctx.strokeStyle = style[0];
+      ctx.lineWidth = Math.max(.7, radius * style[1]);
+      ctx.shadowColor = style[0];
+      ctx.shadowBlur = Math.max(2, radius * .18);
+      ctx.beginPath(); ctx.arc(0, 0, radius + ctx.lineWidth * .45, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+
+    if (body.auroraExcitement > 0) {
+      body.auroraExcitement = Math.max(0, body.auroraExcitement - 0.012);
+      const excitement = body.auroraExcitement;
+      if (excitement > 0.01 && (body.magneticScale ?? 1) > 0.02) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+
+        const auroraGlow = ctx.createRadialGradient(0, -radius * 0.85, 0, 0, -radius * 0.85, radius * 0.6);
+        auroraGlow.addColorStop(0, `rgba(74, 222, 128, ${excitement * 0.85})`);
+        auroraGlow.addColorStop(0.5, `rgba(168, 85, 247, ${excitement * 0.5})`);
+        auroraGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+        ctx.fillStyle = auroraGlow;
+        ctx.beginPath();
+        ctx.ellipse(0, -radius * 0.88, radius * 0.52, radius * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.ellipse(0, radius * 0.88, radius * 0.52, radius * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawCMEParticles() {
+    if (!state.solarFlaresEnabled || !state.cmeParticles.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+
+    for (const p of state.cmeParticles) {
+      const screenPos = worldToScreen(p.x, p.y);
+      if (screenPos.x < -20 || screenPos.x > state.viewport.width + 20 || screenPos.y < -20 || screenPos.y > state.viewport.height + 20) continue;
+
+      const alpha = clamp(p.life / p.maxLife, 0, 1);
+      const grad = ctx.createRadialGradient(screenPos.x, screenPos.y, 0, screenPos.x, screenPos.y, p.size * 3.5);
+      grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+      grad.addColorStop(0.3, p.color || "#ffb13b");
+      grad.addColorStop(0.7, "rgba(249, 115, 22, 0.4)");
+      grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(screenPos.x, screenPos.y, p.size * 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(251, 146, 60, ${alpha * 0.6})`;
+      ctx.lineWidth = Math.max(1, p.size * 0.8);
+      ctx.beginPath();
+      ctx.moveTo(screenPos.x, screenPos.y);
+      ctx.lineTo(screenPos.x - p.vx * 3.2, screenPos.y - p.vy * 3.2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -1874,6 +2260,7 @@
     drawRocheZones();
     drawTrails();
     [...state.bodies].sort((a, b) => a.mass - b.mass).forEach(drawBody);
+    drawCMEParticles();
     drawBinaryBarycenters();
     drawMoveGuide();
     drawLabels();
@@ -1888,6 +2275,7 @@
     state.fps += ((1 / Math.max(wallElapsed, .001)) - state.fps) * .06;
     updateSimulation(elapsed, wallElapsed);
     updateEffects(elapsed);
+    updateSolarPhenomena(elapsed);
     const followedBody = state.bodies.find((body) => body.id === state.followBodyId);
     if (followedBody) {
       state.camera.x = followedBody.x;
@@ -2199,6 +2587,7 @@
     state.bodies.push(newBody);
     refreshOrbitalRelationships();
     createEffect("shockwave", spawnX, spawnY, { color: newBody.color, radius: newBody.radius * 2.5 });
+    SoundEngine.playOrbitPlacement();
     selectBody(newBody);
     renderSystemRoster();
     updateHUD();
@@ -2783,9 +3172,21 @@
       ui.trailLengthValue.value = state.trailLength;
       for (const body of state.bodies) if (body.trail.length > state.trailLength) body.trail.splice(0, body.trail.length - state.trailLength);
     });
-    [["showTrails", "showTrails"], ["showLabels", "showLabels"], ["showGrid", "showGrid"], ["showVelocity", "showVelocity"], ["showOrbits", "showOrbits"]].forEach(([id, property]) => {
-      ui[id].addEventListener("change", () => { state[property] = ui[id].checked; });
+    [["showTrails", "showTrails"], ["showLabels", "showLabels"], ["showGrid", "showGrid"], ["showVelocity", "showVelocity"], ["showOrbits", "showOrbits"], ["solarFlaresEnabled", "solarFlaresEnabled"], ["lensFlaresEnabled", "lensFlaresEnabled"], ["auroraEnabled", "auroraEnabled"]].forEach(([id, property]) => {
+      if (ui[id]) ui[id].addEventListener("change", () => { state[property] = ui[id].checked; });
     });
+
+    ui.audioEnabled?.addEventListener("change", () => {
+      state.audioEnabled = ui.audioEnabled.checked;
+      SoundEngine.toggleMute(!state.audioEnabled);
+    });
+
+    ui.triggerFlareBtn?.addEventListener("click", () => {
+      triggerSolarFlare();
+    });
+
+    window.addEventListener("pointerdown", () => SoundEngine.unlock(), { once: true });
+    window.addEventListener("keydown", () => SoundEngine.unlock(), { once: true });
 
     ui.bodyName.addEventListener("change", () => { const body = selectedBody(); if (body) { body.name = ui.bodyName.value.trim() || "Unnamed body"; updateSelectionUI(); renderSystemRoster(); } });
     ui.bodyMass.addEventListener("change", () => {
