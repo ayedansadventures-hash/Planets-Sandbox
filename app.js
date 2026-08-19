@@ -79,6 +79,7 @@
     evolutionStage: 0,
     evolutionAutoPlay: false,
     evolutionTimer: null,
+    moonsEngaged: true,
   };
 
   const scienceByName = {
@@ -1074,31 +1075,39 @@
   function updateSimulation(realSeconds, wallSeconds = realSeconds) {
     if (!state.running || state.speedDays <= 0 || !state.bodies.length) return;
     const requestedDt = realSeconds * state.speedDays * DAY_TO_YEAR;
+    
+    // Determine dynamic max sub-steps based on requested speed
+    const maxSteps = state.speedDays >= 100 ? 15 : state.speedDays >= 30 ? 25 : 45;
+
     const shortestPeriod = state.bodies.reduce((shortest, body) => {
-      if (!body.orbit) return shortest;
+      if (!body.orbit || body.isMoon) return shortest;
       const parent = state.bodies.find((candidate) => candidate.id === body.orbit.parentId);
       if (!parent || !body.orbit.a) return shortest;
       const period = Math.sqrt(body.orbit.a ** 3 / Math.max(pairGravityMass(parent, body), 1e-15));
       return Math.min(shortest, period);
     }, Infinity);
+
     const encounterStep = closestEncounterStep();
     const accuracyStep = Math.min(
       .002 * DAY_TO_YEAR,
-      Number.isFinite(shortestPeriod) ? shortestPeriod / 100 : Infinity,
+      Number.isFinite(shortestPeriod) ? shortestPeriod / 60 : Infinity,
       Number.isFinite(encounterStep) ? encounterStep : Infinity,
     );
-    const steps = Math.min(750, Math.max(1, Math.ceil(requestedDt / accuracyStep)));
-    const simDt = Math.min(requestedDt, steps * accuracyStep);
-    const dt = simDt / steps;
+
+    const steps = Math.min(maxSteps, Math.max(1, Math.ceil(requestedDt / accuracyStep)));
+    const dt = requestedDt / steps;
     const detailedTrails = state.trailLength > 0 && state.speedDays >= 50;
     const sampleEvery = Math.max(1, Math.floor(steps / 6));
+
     for (let i = 0; i < steps; i++) {
       integrate(dt);
       if (detailedTrails && ((i + 1) % sampleEvery === 0 || i === steps - 1)) recordTrailSnapshot();
     }
-    state.simYears += simDt;
-    const achievedSpeed = simDt / DAY_TO_YEAR / Math.max(wallSeconds, .001);
-    state.effectiveSpeedDays += (achievedSpeed - state.effectiveSpeedDays) * .12;
+
+    state.simYears += requestedDt;
+    const achievedSpeed = requestedDt / DAY_TO_YEAR / Math.max(wallSeconds, .001);
+    state.effectiveSpeedDays += (achievedSpeed - state.effectiveSpeedDays) * .25;
+    
     state.relationshipTick += 1;
     if (state.relationshipTick >= 12) {
       state.relationshipTick = 0;
@@ -2470,6 +2479,29 @@
     if (enabled) toast("Move Bodies enabled — drag any body");
   }
 
+  function toggleMoons(engage = !state.moonsEngaged) {
+    state.moonsEngaged = engage;
+    if (ui.toggleMoonsBtn) {
+      ui.toggleMoonsBtn.classList.toggle("active", engage);
+      ui.toggleMoonsBtn.innerHTML = engage ? "<span>🌙</span> Moons: ON" : "<span>🌑</span> Moons: OFF";
+      ui.toggleMoonsBtn.setAttribute("aria-pressed", String(engage));
+    }
+    if (!engage) {
+      state.bodies = state.bodies.filter((body) => !body.isMoon);
+      if (selectedBody()?.isMoon) state.selectedId = null;
+      refreshOrbitalRelationships();
+      updateSelectionUI();
+      renderSystemRoster();
+      toast("Moons disengaged — Maximum fast-forward speed active!", 4000);
+    } else {
+      addMajorMoons();
+      refreshOrbitalRelationships();
+      updateSelectionUI();
+      renderSystemRoster();
+      toast("Moons engaged — 21 major moons spawned across solar system!", 4000);
+    }
+  }
+
   function bodyGroupIds(rootId) {
     const ids = new Set([rootId]);
     let added = true;
@@ -2682,6 +2714,7 @@
     });
     ui.fitView.addEventListener("click", () => fitView());
     ui.moveBodyMode.addEventListener("click", () => toggleMoveMode());
+    ui.toggleMoonsBtn?.addEventListener("click", () => toggleMoons());
     ui.addBody.addEventListener("click", openLauncher);
     ui.newPlanetTop.addEventListener("click", openLauncher);
     ui.closeLauncher.addEventListener("click", closeLauncher);
