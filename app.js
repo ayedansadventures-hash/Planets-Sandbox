@@ -861,7 +861,7 @@
       state.camera = { x: 0, y: 0, zoom: 120 };
     }
     state.running = true;
-    if (name === "solar") fitView(true);
+    if (name === "solar") state.camera = { x: 0, y: 0, zoom: 28 };
     if (saveSnapshot) state.initialSnapshot = serializeBodies();
     updateInteractionHint();
     updateSelectionUI();
@@ -901,11 +901,13 @@
 
   function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
+    const width = Math.max(100, rect.width || canvas.clientWidth || (window.innerWidth - 322) || 1200);
+    const height = Math.max(100, rect.height || canvas.clientHeight || window.innerHeight || 800);
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    state.viewport = { width: rect.width, height: rect.height, dpr };
+    state.viewport = { width, height, dpr };
     buildStars();
   }
 
@@ -2386,7 +2388,7 @@
 
   function fitView(silent = false) {
     state.followBodyId = null;
-    if (!state.bodies.length) { state.camera = { x: 0, y: 0, zoom: 30 }; return; }
+    if (!state.bodies.length) { state.camera = { x: 0, y: 0, zoom: 28 }; return; }
     const xs = state.bodies.map((b) => b.x);
     const ys = state.bodies.map((b) => b.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
@@ -2394,7 +2396,9 @@
     state.camera.y = (minY + maxY) / 2;
     const width = Math.max(1, maxX - minX);
     const height = Math.max(1, maxY - minY);
-    state.camera.zoom = clamp(Math.min(state.viewport.width * .72 / width, state.viewport.height * .72 / height), 2, 2500);
+    const vpWidth = Math.max(300, state.viewport?.width || 1000);
+    const vpHeight = Math.max(300, state.viewport?.height || 700);
+    state.camera.zoom = clamp(Math.min(vpWidth * .72 / width, vpHeight * .72 / height), 12, 2500);
     if (!silent) toast("Camera fitted to system");
   }
 
@@ -3380,5 +3384,14 @@
   loadPreset("solar");
   setLaunchMode("impact");
   ui.timeScale.dispatchEvent(new Event("input"));
+
+  window.addEventListener("DOMContentLoaded", () => {
+    resizeCanvas();
+  });
+  window.addEventListener("load", () => {
+    resizeCanvas();
+    if (state.preset === "solar") state.camera = { x: 0, y: 0, zoom: 28 };
+  });
+
   requestAnimationFrame(frame);
 })();
