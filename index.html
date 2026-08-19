@@ -16,7 +16,7 @@
           <div class="brand-shade"></div>
           <button class="mobile-settings-close" id="closeSettings" aria-label="Close settings">×</button>
           <div class="brand-copy">
-            <p class="studio-mark">TRIPLE A STUDIO PRESENTS</p>
+            <p class="studio-mark">TRIPLE A STUDIO × ANTIGRAVITY AI</p>
             <p class="eyebrow">INTERACTIVE GRAVITY LAB</p>
             <h1>Planets<br /><span>Sandbox</span></h1>
           </div>
@@ -34,6 +34,7 @@
                 <option value="earthMoon">Earth &amp; Moon</option>
                 <option value="binary">Binary Stars</option>
                 <option value="chaos">Five-Body Chaos</option>
+                <option value="evolution">Evolution of the Solar System</option>
               </select>
               <button class="primary-button" id="loadPreset">Load</button>
             </div>
@@ -142,6 +143,56 @@
         <div class="toast" id="toast" role="status"></div>
         <div class="canvas-credit">NASA/JPL imagery · visual sizes enhanced · physics uses true distances · Scroll to zoom</div>
 
+        <aside class="evolution-hud" id="evolutionHud" hidden>
+          <div class="evolution-header">
+            <div class="evolution-badge">TIMELAPSE PRESET</div>
+            <h3>Evolution of the Solar System</h3>
+            <button class="evolution-close" id="closeEvolutionHud" aria-label="Hide evolution panel">×</button>
+          </div>
+          <p class="evolution-description" id="evolutionDesc">
+            Solar Nebula &amp; Protoplanets. The young Sun is surrounded by a spinning protoplanetary disk of gas and planetesimals.
+          </p>
+          <div class="evolution-stepper" id="evolutionStepper">
+            <button class="evo-step active" data-step="0">
+              <span class="step-num">1</span>
+              <span class="step-name">4.57 Ga · Nebula</span>
+            </button>
+            <button class="evo-step" data-step="1">
+              <span class="step-num">2</span>
+              <span class="step-name">4.51 Ga · Theia Impact</span>
+            </button>
+            <button class="evo-step" data-step="2">
+              <span class="step-num">3</span>
+              <span class="step-name">4.40 Ga · Wet Venus &amp; Mars</span>
+            </button>
+            <button class="evo-step" data-step="3">
+              <span class="step-num">4</span>
+              <span class="step-name">4.20 Ga · 5 Giants Era</span>
+            </button>
+            <button class="evo-step" data-step="4">
+              <span class="step-num">5</span>
+              <span class="step-name">3.90 Ga · 5th Giant Ejection</span>
+            </button>
+            <button class="evo-step" data-step="5">
+              <span class="step-num">6</span>
+              <span class="step-name">2.40 Ga · Earth Terraforms</span>
+            </button>
+            <button class="evo-step" data-step="6">
+              <span class="step-num">7</span>
+              <span class="step-name">Present · Modern System</span>
+            </button>
+            <button class="evo-step" data-step="7">
+              <span class="step-num">8</span>
+              <span class="step-name">+5.00 Ga · Red Giant</span>
+            </button>
+          </div>
+          <div class="evolution-controls">
+            <button id="evoPrevBtn">◄ Prev Era</button>
+            <button id="evoPlayBtn" class="evo-play">▶ Auto-Play Eras</button>
+            <button id="evoNextBtn">Next Era ►</button>
+          </div>
+        </aside>
+
         <aside class="launch-panel" id="launchPanel" aria-label="New planet launcher" aria-hidden="true" inert>
           <div class="launch-header">
             <div><p class="eyebrow">OBJECT CREATOR</p><h2>New Planet</h2></div>
@@ -201,7 +252,7 @@
         <div><kbd>F</kbd><span>Fit the entire system</span></div>
         <div><kbd>Esc</kbd><span>Cancel the current action</span></div>
       </div>
-      <p class="dialog-note">Tip: New Planet supports impacts, normal orbits, and mass-matched binary systems. Hover a selected planet to reveal its Roche zone and magnetic field.</p>
+      <p class="dialog-note">Created by Ayedan in collaboration with OpenAI Codex &amp; Google DeepMind Antigravity AI.<br />Tip: Evolution of the Solar System preset shows the solar system's history from nebula to the 5th giant ejection, present day, and future red giant.</p>
     </dialog>
 
     <script src="app.js"></script>

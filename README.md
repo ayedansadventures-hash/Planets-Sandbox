@@ -21,7 +21,8 @@ Then visit `http://127.0.0.1:4173`.
 - Readable close-moon rendering keeps moons visible beside their planets at system-wide zoom while physics retains true orbital distances
 - Smaller planet/moon visuals and one-direction close-moon animation prevent high-speed wobble around giant planets even at the full 333-days-per-second setting
 - High-speed trails take extra physics samples for smoother moon paths, and the HUD reports achieved speed when a device must throttle
-- Solar System, Earth and Moon, binary-star, and five-body-chaos presets
+- Solar System, Earth & Moon, Binary Stars, Five-Body Chaos, and **Evolution of the Solar System** (a 5-era astronomical timeline from protoplanetary nebula birth to the ejection of the 5th giant planet, present day, and far-future Red Giant evolution)
+- Interactive Evolution HUD with era scrubbing, step indicators, and auto-play timelapse controls
 - Pause, resume, reset, clear, and time-speed controls
 - Per-body gravity strength from 0× to 100× with adaptive close-encounter timesteps
 - Barycentric Solar System initialization, including the Sun's Jupiter-driven motion around the system center of mass
