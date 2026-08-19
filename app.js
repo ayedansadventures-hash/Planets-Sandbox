@@ -302,14 +302,14 @@
   }
 
   const evolutionDescriptions = [
-    "Solar Nebula & Protoplanets (~4.57 Billion Years Ago): The T-Tauri Sun is surrounded by a spinning protoplanetary disk of gas and dust rings. Gas giant cores condense from nebular material.",
-    "Theia Collision & Moon Formation (~4.51 Billion Years Ago): Proto-Earth collides with Mars-sized protoplanet Theia! Impact debris surrounds Earth and rapidly coalesces to form the Moon close by.",
-    "Ancient Habitable Venus & Wet Mars (~4.40 Billion Years Ago): Early Venus possesses liquid oceans under a temperate climate. Early Mars has lakes, rivers, a magnetic dynamo, and active volcanism.",
+    "Solar Nebula & Protoplanets (~4.57 Billion Years Ago): The T-Tauri Sun is surrounded by a spinning protoplanetary disk of gas and dust. Gas giant cores and inner planetesimals condense from nebular material.",
+    "Theia Collision & Moon Formation (~4.51 Billion Years Ago): Proto-Earth collides with Mars-sized protoplanet Theia! Impact debris orbits Earth and rapidly coalesces to form the Moon.",
+    "Ancient Habitable Venus & Wet Mars (~4.40 Billion Years Ago): Early Venus possesses liquid oceans under a temperate climate. Early Mars has rivers, crater lakes, a magnetic dynamo, and active volcanoes.",
     "The 5-Giant Era & Grand Tack (~4.20 Billion Years Ago): Early Solar System possessed 5 giant planets (including Ice Giant V). Jupiter migrates inward then outward, shaping the early asteroid belt.",
-    "Giant Instability & 5th Giant Ejection (~3.90 Billion Years Ago): Resonance crossing between Jupiter & Saturn triggers giant migration. Jupiter flings Ice Giant V into interstellar space, triggering the LHB!",
-    "Great Oxidation & Earth Terraforming (~2.40 Billion Years Ago): Cyanobacteria evolve oxygenic photosynthesis, terraforming Earth into a blue oxygen world. Mars dries out and Venus undergoes runaway greenhouse.",
+    "Giant Instability & 5th Giant Ejection (~3.90 Billion Years Ago): Resonance crossing between Jupiter & Saturn triggers giant planet migration. Jupiter flings Ice Giant V into interstellar space, triggering the Late Heavy Bombardment!",
+    "Great Oxidation & Earth Terraforming (~2.40 Billion Years Ago): Cyanobacteria evolve oxygenic photosynthesis, terraforming Earth into a blue oxygen world. Mars loses its atmosphere while Venus overheats.",
     "Present-Day Solar System (Present): Modern 8-planet system in stable orbits with Earth in the habitable zone, 21 major moons, and Jupiter acting as a cosmic shield.",
-    "Stellar Evolution & Red Giant Remnant (+5.00 Billion Years): The Sun expands into a Red Giant, swallowing Mercury and Venus, scorching Earth, and leaving a White Dwarf remnant.",
+    "Stellar Evolution & Red Giant Remnant (+5.00 Billion Years): The Sun expands into a Red Giant, swallowing Mercury and Venus, scorching Earth, and pushing outer giant orbits outward before leaving a White Dwarf remnant.",
   ];
 
   function loadEvolutionStage(stageIndex, saveSnapshot = true) {
@@ -331,23 +331,32 @@
     }
 
     if (stageIndex === 0) {
-      const sun = makeBody({ name: "Young Sun", mass: 332946, radius: .20, color: "#ffc857", texture: "sun", x: 0, y: 0 });
+      // 4.57 Ga: Solar Nebula & Protoplanets
+      const sun = makeBody({ name: "Young Sun", mass: 332946, radius: .20, radiusKm: 696340, color: "#ffc857", texture: "sun", x: 0, y: 0 });
       state.bodies = [sun];
-      const protoJupiter = makeOrbiter(sun, { name: "Proto-Jupiter", mass: 250, radius: .11, color: "#dca773", texture: "jupiter", distance: 5.2, eccentricity: .02, phase: .5 });
-      const protoSaturn = makeOrbiter(sun, { name: "Proto-Saturn", mass: 80, radius: .095, color: "#e1ca8f", texture: "saturn", distance: 8.8, eccentricity: .03, phase: 2.1 });
-      const iceGiantV = makeOrbiter(sun, { name: "Ice Giant V", mass: 16, radius: .08, color: "#93c5fd", texture: "ice", distance: 12.2, eccentricity: .04, phase: 3.8 });
-      const protoUranus = makeOrbiter(sun, { name: "Proto-Uranus", mass: 12, radius: .075, color: "#74d4dc", texture: "uranus", distance: 16.5, eccentricity: .04, phase: 1.1 });
-      const protoNeptune = makeOrbiter(sun, { name: "Proto-Neptune", mass: 14, radius: .075, color: "#4672e6", texture: "neptune", distance: 23.0, eccentricity: .01, phase: 5.2 });
-      state.bodies.push(protoJupiter, protoSaturn, iceGiantV, protoUranus, protoNeptune);
 
-      for (let i = 0; i < 20; i++) {
-        const dist = 0.5 + (i / 20) * 28.0;
+      const pMerc = makeOrbiter(sun, { name: "Proto-Mercury", mass: .055, radius: .034, radiusKm: 2439.7, color: "#8d8982", texture: "mercury", distance: .39 });
+      const pVenus = makeOrbiter(sun, { name: "Proto-Venus", mass: .815, radius: .05, radiusKm: 6051.8, color: "#e6a65c", texture: "venus", distance: .72 });
+      const pEarth = makeOrbiter(sun, { name: "Proto-Earth", mass: 1.0, radius: .055, radiusKm: 6371, color: "#4f9cff", texture: "earth", distance: 1.0 });
+      const pMars = makeOrbiter(sun, { name: "Proto-Mars", mass: .107, radius: .043, radiusKm: 3389.5, color: "#a94f36", texture: "mars", distance: 1.52 });
+
+      const protoJupiter = makeOrbiter(sun, { name: "Proto-Jupiter", mass: 250, radius: .11, radiusKm: 69911, color: "#dca773", texture: "jupiter", distance: 5.2, eccentricity: .02, phase: .5 });
+      const protoSaturn = makeOrbiter(sun, { name: "Proto-Saturn", mass: 80, radius: .095, radiusKm: 58232, color: "#e1ca8f", texture: "saturn", distance: 8.8, eccentricity: .03, phase: 2.1 });
+      const iceGiantV = makeOrbiter(sun, { name: "Ice Giant V", mass: 16, radius: .08, radiusKm: 26000, color: "#93c5fd", texture: "ice", distance: 12.2, eccentricity: .04, phase: 3.8 });
+      const protoUranus = makeOrbiter(sun, { name: "Proto-Uranus", mass: 12, radius: .075, radiusKm: 25362, color: "#74d4dc", texture: "uranus", distance: 16.5, eccentricity: .04, phase: 1.1 });
+      const protoNeptune = makeOrbiter(sun, { name: "Proto-Neptune", mass: 14, radius: .075, radiusKm: 24622, color: "#4672e6", texture: "neptune", distance: 23.0, eccentricity: .01, phase: 5.2 });
+
+      state.bodies.push(pMerc, pVenus, pEarth, pMars, protoJupiter, protoSaturn, iceGiantV, protoUranus, protoNeptune);
+
+      for (let i = 0; i < 16; i++) {
+        const dist = 0.5 + (i / 16) * 26.0;
         if (Math.abs(dist - 5.2) < 0.8 || Math.abs(dist - 8.8) < 0.8) continue;
         const angle = (i * 1.37) % (Math.PI * 2);
         state.bodies.push(makeOrbiter(sun, {
-          name: `Planetesimal ${i + 1}`,
-          mass: 0.05 + (i % 5) * 0.1,
-          radius: 0.025,
+          name: `Nebula Asteroid ${i + 1}`,
+          mass: 0.001,
+          radius: 0.026,
+          radiusKm: 150,
           color: i % 2 === 0 ? "#a89b8d" : "#7c98b3",
           texture: "rock",
           distance: dist,
@@ -355,73 +364,60 @@
           phase: angle
         }));
       }
-      recenterSubsystem(state.bodies, { x: 0, y: 0, vx: 0, vy: 0 });
-      state.camera = { x: 0, y: 0, zoom: 20 };
+      state.camera = { x: 0, y: 0, zoom: 35 };
       toast("Era 1: T-Tauri Solar Nebula & Protoplanetary Disk");
 
     } else if (stageIndex === 1) {
+      // 4.51 Ga: Theia Collision & Moon Formation!
       const sun = makeBody(planetData[0]);
       state.bodies = [sun];
 
-      const protoEarth = makeOrbiter(sun, { name: "Proto-Earth", mass: 0.88, radius: .054, color: "#e86a38", texture: "mars", distance: 1.0, phase: 1.2 });
-      const theia = makeBody({
+      const pMerc = makeOrbiter(sun, { name: "Mercury", mass: .055, radius: .034, radiusKm: 2439.7, color: "#8d8982", texture: "mercury", distance: .39 });
+      const pVenus = makeOrbiter(sun, { name: "Venus", mass: .815, radius: .05, radiusKm: 6051.8, color: "#e6a65c", texture: "venus", distance: .72 });
+      
+      const protoEarth = makeOrbiter(sun, { name: "Proto-Earth", mass: 0.89, radius: .054, radiusKm: 6371, color: "#e86a38", texture: "mars", distance: 1.0, phase: 1.0 });
+      
+      const theia = makeOrbiter(sun, {
         name: "Theia (Impactor)",
         mass: 0.107,
         radius: .043,
+        radiusKm: 3400,
         color: "#f97316",
         texture: "mars",
-        x: protoEarth.x + 0.08,
-        y: protoEarth.y - 0.04,
-        vx: protoEarth.vx - 1.2,
-        vy: protoEarth.vy - 1.4,
+        distance: 1.008,
+        eccentricity: .03,
+        phase: 1.03
       });
 
-      const nascentMoon = makeOrbiter(protoEarth, {
-        name: "Early Moon (Coalescing)",
+      const earlyMoon = makeOrbiter(protoEarth, {
+        name: "Coalescing Moon",
         mass: 0.0123,
         radius: .035,
         radiusKm: 1737.4,
         color: "#fbbf24",
         texture: "rock",
-        distance: .0008,
-        eccentricity: .08,
+        distance: .00257,
+        eccentricity: .05,
         phase: .5,
-        isMoon: true
+        isMoon: true,
+        tidalImmune: true
       });
 
-      for (let i = 0; i < 8; i++) {
-        const dAngle = (i * 0.785);
-        state.bodies.push({
-          id: state.idCounter++,
-          name: `Debris Shard ${i+1}`,
-          x: protoEarth.x + Math.cos(dAngle) * 0.003,
-          y: protoEarth.y + Math.sin(dAngle) * 0.003,
-          vx: protoEarth.vx - Math.sin(dAngle) * 6.5,
-          vy: protoEarth.vy + Math.cos(dAngle) * 6.5,
-          mass: 0.0001,
-          radius: 0.015,
-          collisionRadius: 0.0001,
-          color: "#f59e0b",
-          texture: "rock",
-          isMoon: true
-        });
-      }
-
-      state.bodies.push(protoEarth, theia, nascentMoon);
-      
-      const venus = makeOrbiter(sun, { ...planetData[2], distance: .72 });
-      const mars = makeOrbiter(sun, { ...planetData[4], distance: 1.52 });
+      const pMars = makeOrbiter(sun, { name: "Mars", mass: .107, radius: .043, radiusKm: 3389.5, color: "#a94f36", texture: "mars", distance: 1.52 });
       const jupiter = makeOrbiter(sun, { ...planetData[5], distance: 5.2 });
-      state.bodies.push(venus, mars, jupiter);
+      const saturn = makeOrbiter(sun, { ...planetData[6], distance: 8.8 });
+      const iceGiantV = makeOrbiter(sun, { name: "Ice Giant V", mass: 17, radius: .08, radiusKm: 26000, color: "#93c5fd", texture: "ice", distance: 12.2 });
 
-      recenterSubsystem(state.bodies, { x: 0, y: 0, vx: 0, vy: 0 });
-      state.followBodyId = protoEarth.id;
-      state.camera = { x: protoEarth.x, y: protoEarth.y, zoom: 600 };
-      toast("IMPACT EVENT: Proto-Earth collides with Theia! The Moon coalesces from impact debris close to Earth!", 6000);
+      state.bodies.push(pMerc, pVenus, protoEarth, theia, earlyMoon, pMars, jupiter, saturn, iceGiantV);
+      state.camera = { x: 0, y: 0, zoom: 45 };
+      toast("GIANT IMPACT: Proto-Earth & Mars-sized Theia on close encounter orbit forming the Moon!", 6000);
 
     } else if (stageIndex === 2) {
+      // 4.40 Ga: Ancient Habitable Venus & Wet Mars
       const sun = makeBody(planetData[0]);
       state.bodies = [sun];
+
+      const pMerc = makeOrbiter(sun, { name: "Mercury", mass: .055, radius: .034, radiusKm: 2439.7, color: "#8d8982", texture: "mercury", distance: .39 });
 
       const oceanVenus = makeOrbiter(sun, {
         name: "Ocean Venus (Habitable)",
@@ -446,7 +442,7 @@
         eccentricity: .0167,
         phase: 3.5
       });
-      const hMoon = makeOrbiter(hEarth, { name: "Moon", mass: .0123, radius: .035, radiusKm: 1737.4, color: "#9ca3af", texture: "rock", distance: .0012, eccentricity: .05, phase: .4, isMoon: true });
+      const hMoon = makeOrbiter(hEarth, { name: "Moon", mass: .0123, radius: .035, radiusKm: 1737.4, color: "#9ca3af", texture: "rock", distance: .00257, eccentricity: .05, phase: .4, isMoon: true, tidalImmune: true });
 
       const wetMars = makeOrbiter(sun, {
         name: "Wet Mars (Oceanic)",
@@ -460,69 +456,72 @@
         phase: 5.1
       });
 
-      const merc = makeOrbiter(sun, { ...planetData[1], distance: .39 });
       const jupiter = makeOrbiter(sun, { ...planetData[5], distance: 5.2 });
       const saturn = makeOrbiter(sun, { ...planetData[6], distance: 8.8 });
+      const iceGiantV = makeOrbiter(sun, { name: "Ice Giant V", mass: 17, radius: .08, radiusKm: 26000, color: "#93c5fd", texture: "ice", distance: 12.2 });
 
-      state.bodies.push(merc, oceanVenus, hEarth, hMoon, wetMars, jupiter, saturn);
-      recenterSubsystem(state.bodies, { x: 0, y: 0, vx: 0, vy: 0 });
+      state.bodies.push(pMerc, oceanVenus, hEarth, hMoon, wetMars, jupiter, saturn, iceGiantV);
       state.camera = { x: 0, y: 0, zoom: 45 };
-      toast("HABITABLE ERA: Early Venus and Mars both possess liquid water oceans, rivers, and atmospheres!", 6000);
+      toast("ANCIENT HABITABILITY: Early Venus and Mars both possess liquid oceans and protective atmospheres!", 6000);
 
     } else if (stageIndex === 3) {
+      // 4.20 Ga: 5 Giants Era & Grand Tack
       const sun = makeBody(planetData[0]);
       state.bodies = [sun];
-      
-      const jupiter = makeOrbiter(sun, { ...planetData[5], distance: 5.2 });
-      const saturn = makeOrbiter(sun, { ...planetData[6], distance: 8.8 });
-      const iceGiantV = makeOrbiter(sun, { name: "Ice Giant V (5th Giant)", mass: 17, radius: .08, radiusKm: 26000, color: "#93c5fd", texture: "ice", distance: 12.2, eccentricity: .04, phase: 3.8, ring: true });
-      const uranus = makeOrbiter(sun, { ...planetData[7], distance: 16.8 });
-      const neptune = makeOrbiter(sun, { ...planetData[8], distance: 24.0 });
       
       const merc = makeOrbiter(sun, { ...planetData[1], distance: .39 });
       const venus = makeOrbiter(sun, { ...planetData[2], distance: .72 });
       const earth = makeOrbiter(sun, { ...planetData[3], distance: 1.0 });
       const mars = makeOrbiter(sun, { ...planetData[4], distance: 1.52 });
 
+      const jupiter = makeOrbiter(sun, { ...planetData[5], distance: 5.2 });
+      const saturn = makeOrbiter(sun, { ...planetData[6], distance: 8.8 });
+      const iceGiantV = makeOrbiter(sun, { name: "Ice Giant V (5th Giant)", mass: 17, radius: .08, radiusKm: 26000, color: "#93c5fd", texture: "ice", distance: 12.2, eccentricity: .04, phase: 3.8, ring: true });
+      const uranus = makeOrbiter(sun, { ...planetData[7], distance: 16.8 });
+      const neptune = makeOrbiter(sun, { ...planetData[8], distance: 24.0 });
+
       state.bodies.push(merc, venus, earth, mars, jupiter, saturn, iceGiantV, uranus, neptune);
-      recenterSubsystem(state.bodies, { x: 0, y: 0, vx: 0, vy: 0 });
-      state.camera = { x: 0, y: 0, zoom: 17 };
+      state.camera = { x: 0, y: 0, zoom: 30 };
       toast("Era 4: The 5-Giant Era (With Ice Giant V in resonance)");
 
     } else if (stageIndex === 4) {
+      // 3.90 Ga: 5th Giant Ejection & LHB
       const sun = makeBody(planetData[0]);
       state.bodies = [sun];
 
+      const merc = makeOrbiter(sun, { ...planetData[1], distance: .39 });
+      const venus = makeOrbiter(sun, { ...planetData[2], distance: .72 });
+      const earth = makeOrbiter(sun, { ...planetData[3], distance: 1.0 });
+      const moon = makeOrbiter(earth, { name: "Moon", mass: .0123, radius: .035, radiusKm: 1737.4, color: "#b9bcc2", texture: "rock", distance: .00257, eccentricity: .0549, phase: .4, isMoon: true, tidalImmune: true });
+      const mars = makeOrbiter(sun, { ...planetData[4], distance: 1.52 });
+
       const jupiter = makeOrbiter(sun, { ...planetData[5], distance: 5.2, phase: 0.1 });
       const saturn = makeOrbiter(sun, { ...planetData[6], distance: 8.9, phase: 0.8 });
-      const uranus = makeOrbiter(sun, { ...planetData[7], distance: 17.5 });
-      const neptune = makeOrbiter(sun, { ...planetData[8], distance: 25.0 });
-
-      const iceGiantV = makeBody({
+      
+      const iceGiantV = makeOrbiter(sun, {
         name: "5th Giant (EJECTING)",
         mass: 17,
         radius: .085,
         radiusKm: 26000,
         color: "#a5f3fc",
         texture: "ice",
-        x: jupiter.x + 0.35,
-        y: jupiter.y - 0.28,
-        vx: jupiter.vx - 3.8,
-        vy: jupiter.vy + 2.9,
-        scienceType: "ice",
+        distance: 5.8,
+        eccentricity: 0.55,
+        phase: 0.2
       });
 
-      const earth = makeOrbiter(sun, { ...planetData[3], distance: 1.0 });
-      const moon = makeOrbiter(earth, { name: "Moon", mass: .0123, radius: .035, radiusKm: 1737.4, color: "#b9bcc2", texture: "rock", distance: .00257, eccentricity: .0549, phase: .4, isMoon: true });
-      
-      state.bodies.push(jupiter, saturn, iceGiantV, uranus, neptune, earth, moon);
+      const uranus = makeOrbiter(sun, { ...planetData[7], distance: 17.5 });
+      const neptune = makeOrbiter(sun, { ...planetData[8], distance: 25.0 });
 
-      for (let i = 0; i < 14; i++) {
-        const pAngle = (i * 0.45) % (Math.PI * 2);
+      state.bodies.push(merc, venus, earth, moon, mars, jupiter, saturn, iceGiantV, uranus, neptune);
+
+      for (let i = 0; i < 12; i++) {
+        const pAngle = (i * 0.5) % (Math.PI * 2);
         state.bodies.push(makeOrbiter(sun, {
-          name: `LHB Impactor ${i+1}`,
+          name: `LHB Asteroid ${i+1}`,
           mass: 0.001,
           radius: .026,
+          radiusKm: 120,
           color: "#9c8778",
           texture: "rock",
           distance: 2.2 + (i % 4) * 0.8,
@@ -531,14 +530,26 @@
         }));
       }
 
-      recenterSubsystem(state.bodies, { x: 0, y: 0, vx: 0, vy: 0 });
-      state.followBodyId = iceGiantV.id;
-      state.camera = { x: iceGiantV.x, y: iceGiantV.y, zoom: 24 };
-      toast("ALERT: Ice Giant V encounters Jupiter and is catapulted into deep space!", 6000);
+      state.camera = { x: 0, y: 0, zoom: 28 };
+      toast("INSTABILITY ALERT: Resonance flings Ice Giant V near Jupiter, triggering ejection and LHB impacts!", 6000);
 
     } else if (stageIndex === 5) {
+      // 2.40 Ga: Great Oxidation & Earth Terraforming
       const sun = makeBody(planetData[0]);
       state.bodies = [sun];
+
+      const merc = makeOrbiter(sun, { ...planetData[1], distance: .39 });
+      const runawayVenus = makeOrbiter(sun, {
+        name: "Runaway Greenhouse Venus",
+        mass: .815,
+        radius: .05,
+        radiusKm: 6051.8,
+        color: "#f59e0b",
+        texture: "venus",
+        distance: .72,
+        eccentricity: .0068,
+        phase: 4.8
+      });
 
       const cyanEarth = makeOrbiter(sun, {
         name: "Terraformed Earth (Blue Sky)",
@@ -551,7 +562,7 @@
         eccentricity: .0167,
         phase: 1.0
       });
-      const moon = makeOrbiter(cyanEarth, { name: "Moon", mass: .0123, radius: .035, radiusKm: 1737.4, color: "#b9bcc2", texture: "rock", distance: .002, eccentricity: .0549, phase: .4, isMoon: true });
+      const moon = makeOrbiter(cyanEarth, { name: "Moon", mass: .0123, radius: .035, radiusKm: 1737.4, color: "#b9bcc2", texture: "rock", distance: .00257, eccentricity: .0549, phase: .4, isMoon: true, tidalImmune: true });
 
       const dryMars = makeOrbiter(sun, {
         name: "Dried Mars (Lost Dynamo)",
@@ -565,56 +576,41 @@
         phase: 2.4
       });
 
-      const runawayVenus = makeOrbiter(sun, {
-        name: "Runaway Greenhouse Venus",
-        mass: .815,
-        radius: .05,
-        radiusKm: 6051.8,
-        color: "#f59e0b",
-        texture: "venus",
-        distance: .72,
-        eccentricity: .0068,
-        phase: 4.8
-      });
-
-      const merc = makeOrbiter(sun, { ...planetData[1], distance: .39 });
       const jupiter = makeOrbiter(sun, { ...planetData[5], distance: 5.2 });
       const saturn = makeOrbiter(sun, { ...planetData[6], distance: 9.58 });
 
       state.bodies.push(merc, runawayVenus, cyanEarth, moon, dryMars, jupiter, saturn);
-      recenterSubsystem(state.bodies, { x: 0, y: 0, vx: 0, vy: 0 });
-      state.camera = { x: 0, y: 0, zoom: 35 };
-      toast("TERRAFORMING: Cyanobacteria produce oxygen on Earth; Mars loses its atmosphere while Venus overheats!", 6000);
+      state.camera = { x: 0, y: 0, zoom: 40 };
+      toast("GREAT OXIDATION: Cyanobacteria terraform Earth into a blue oxygen world; Mars dries out while Venus overheats!", 6000);
 
     } else if (stageIndex === 6) {
+      // Present Day
       const sun = makeBody(planetData[0]);
       state.bodies = [sun];
       for (const planet of planetData.slice(1)) state.bodies.push(makeOrbiter(sun, { ...planet, distance: planet.x }));
       addMajorMoons();
-      recenterSubsystem(state.bodies, { x: 0, y: 0, vx: 0, vy: 0 });
-      state.camera = { x: 0, y: 0, zoom: 17 };
+      state.camera = { x: 0, y: 0, zoom: 20 };
       toast("Era 7: Present-Day Solar System");
 
     } else if (stageIndex === 7) {
+      // +5.00 Ga: Red Giant & Remnant
       const redSun = makeBody({ name: "Red Giant Sun", mass: 250000, radius: .42, radiusKm: 65000000, color: "#ff5232", texture: "sun", x: 0, y: 0 });
       state.bodies = [redSun];
 
-      const scorchedEarth = makeOrbiter(redSun, { name: "Scorched Earth", mass: .95, radius: .055, color: "#ef4444", texture: "mars", distance: 1.45, eccentricity: .06 });
-      const marsRemnant = makeOrbiter(redSun, { name: "Desolate Mars", mass: .107, radius: .043, color: "#7f1d1d", texture: "mars", distance: 2.10, eccentricity: .12 });
-      const expandedJupiter = makeOrbiter(redSun, { name: "Expanded Jupiter", mass: 317.8, radius: .135, color: "#d97706", texture: "jupiter", distance: 6.8 });
-      const expandedSaturn = makeOrbiter(redSun, { name: "Expanded Saturn", mass: 95.2, radius: .12, color: "#b45309", texture: "saturn", distance: 12.5, ring: true });
-      const expandedUranus = makeOrbiter(redSun, { name: "Expanded Uranus", mass: 14.5, radius: .085, color: "#0284c7", texture: "uranus", distance: 24.8 });
-      const expandedNeptune = makeOrbiter(redSun, { name: "Expanded Neptune", mass: 17.1, radius: .082, color: "#1e3a8a", texture: "neptune", distance: 38.0 });
+      const scorchedEarth = makeOrbiter(redSun, { name: "Scorched Earth", mass: .95, radius: .055, radiusKm: 6371, color: "#ef4444", texture: "mars", distance: 1.45, eccentricity: .06 });
+      const marsRemnant = makeOrbiter(redSun, { name: "Desolate Mars", mass: .107, radius: .043, radiusKm: 3389.5, color: "#7f1d1d", texture: "mars", distance: 2.10, eccentricity: .12 });
+      const expandedJupiter = makeOrbiter(redSun, { name: "Expanded Jupiter", mass: 317.8, radius: .135, radiusKm: 69911, color: "#d97706", texture: "jupiter", distance: 6.8 });
+      const expandedSaturn = makeOrbiter(redSun, { name: "Expanded Saturn", mass: 95.2, radius: .12, radiusKm: 58232, color: "#b45309", texture: "saturn", distance: 12.5, ring: true });
+      const expandedUranus = makeOrbiter(redSun, { name: "Expanded Uranus", mass: 14.5, radius: .085, radiusKm: 25362, color: "#0284c7", texture: "uranus", distance: 24.8 });
+      const expandedNeptune = makeOrbiter(redSun, { name: "Expanded Neptune", mass: 17.1, radius: .082, radiusKm: 24622, color: "#1e3a8a", texture: "neptune", distance: 38.0 });
 
       state.bodies.push(scorchedEarth, marsRemnant, expandedJupiter, expandedSaturn, expandedUranus, expandedNeptune);
-      recenterSubsystem(state.bodies, { x: 0, y: 0, vx: 0, vy: 0 });
-      state.camera = { x: 0, y: 0, zoom: 12 };
+      state.camera = { x: 0, y: 0, zoom: 15 };
       toast("Era 8: Red Giant Sun & Planetary Nebula Remnant");
     }
 
     state.running = true;
     if (saveSnapshot) state.initialSnapshot = serializeBodies();
-    updateInteractionHint();
     updateInteractionHint();
     updateSelectionUI();
     renderSystemRoster();
@@ -2442,7 +2438,10 @@
       state.pointer.worldX = world.x;
       state.pointer.worldY = world.y;
       if (state.addMode) state.launchStart = world;
-      else canvas.classList.add("dragging");
+      else {
+        state.followBodyId = null;
+        canvas.classList.add("dragging");
+      }
     });
     canvas.addEventListener("pointermove", (event) => {
       state.hoveredId = bodyAt(event.offsetX, event.offsetY)?.id ?? null;
@@ -2500,6 +2499,7 @@
     canvas.addEventListener("dblclick", (event) => focusBody(bodyAt(event.offsetX, event.offsetY)));
     canvas.addEventListener("wheel", (event) => {
       event.preventDefault();
+      state.followBodyId = null;
       const before = screenToWorld(event.offsetX, event.offsetY);
       const wheelDelta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * state.viewport.height : event.deltaY;
       state.camera.zoom = clamp(state.camera.zoom * Math.exp(-wheelDelta * .0042), 1.5, 250000);
