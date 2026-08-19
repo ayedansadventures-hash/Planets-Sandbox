@@ -200,6 +200,7 @@
 
   const ui = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
   const state = {
+    viewport: { width: window.innerWidth || 1280, height: window.innerHeight || 800, dpr: window.devicePixelRatio || 1 },
     bodies: [],
     initialSnapshot: [],
     selectedId: null,

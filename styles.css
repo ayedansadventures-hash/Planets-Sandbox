@@ -186,6 +186,7 @@ kbd { min-width: 44px; padding: 5px 7px; color: #bdd7ff; text-align: center; bor
   display: flex;
   gap: 4px;
   align-items: center;
+  pointer-events: auto;
 }
 
 .icon-hud-btn {
@@ -202,6 +203,7 @@ kbd { min-width: 44px; padding: 5px 7px; color: #bdd7ff; text-align: center; bor
   border: 1px solid rgba(148, 177, 230, 0.25);
   border-radius: 6px;
   backdrop-filter: blur(8px);
+  pointer-events: auto;
 }
 
 .icon-hud-btn:hover {
