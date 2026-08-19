@@ -5,6 +5,7 @@
   const EARTHS_PER_SUN = 332946;
   const DAY_TO_YEAR = 1 / 365.25;
   const KM_PER_AU = 149597870.7;
+  const AU_YEAR_TO_KM_S = KM_PER_AU / (365.25 * 86400);
   const EARTH_RADIUS_AU = 6371 / KM_PER_AU;
   const MAX_BODIES = 80;
   const ROCHE_GAMEPLAY_SCALE = 4;
@@ -832,35 +833,41 @@
         const closestDx = previousDx + segmentX * closestT;
         const closestDy = previousDy + segmentY * closestT;
         if (distance >= collisionDistance && Math.hypot(closestDx, closestDy) >= collisionDistance) continue;
-        const quadraticB = 2 * (previousDx * segmentX + previousDy * segmentY);
-        const quadraticC = previousDx * previousDx + previousDy * previousDy - collisionDistance * collisionDistance;
-        const discriminant = quadraticB * quadraticB - 4 * segmentLengthSq * quadraticC;
-        const contactT = segmentLengthSq > 0 && discriminant >= 0
-          ? clamp((-quadraticB - Math.sqrt(discriminant)) / (2 * segmentLengthSq), 0, 1)
-          : closestT;
-        const firstName = a.name;
-        const secondName = b.name;
-        const primary = a.mass >= b.mass ? a : b;
-        const vulnerable = primary === a ? b : a;
-        const primaryRoche = rocheLimit(primary, vulnerable.mass, vulnerable.collisionRadius, vulnerable.gravityScale);
-        const crossedRoche = primaryRoche > 0 && Math.min(distance, Math.hypot(closestDx, closestDy)) < primaryRoche;
-        const wasTidallyStressed = vulnerable.tidalPrimaryId === primary.id && vulnerable.tidalStress > 0;
-        if (crossedRoche && wasTidallyStressed && !vulnerable.tidalImmune && primary.mass >= vulnerable.mass * 12) {
-          if (contactT < 1) {
-            a.x = (a.prevX ?? a.x) + (a.x - (a.prevX ?? a.x)) * contactT;
-            a.y = (a.prevY ?? a.y) + (a.y - (a.prevY ?? a.y)) * contactT;
-            b.x = (b.prevX ?? b.x) + (b.x - (b.prevX ?? b.x)) * contactT;
-            b.y = (b.prevY ?? b.y) + (b.y - (b.prevY ?? b.y)) * contactT;
-          }
-          vulnerable.tidalPrimaryId = primary.id;
-          vulnerable.tidalStress = 1;
-          return;
-        }
-        spawnImpactEffect(a, b, (a.x + b.x) / 2, (a.y + b.y) / 2);
-        mergeBodies(a, b, `${firstName} and ${secondName} merged`);
+        processRealisticImpact(a, b, Math.min(distance, Math.hypot(closestDx, closestDy)));
         return;
       }
     }
+  }
+
+  function processRealisticImpact(a, b, distance) {
+    const relVx = b.vx - a.vx;
+    const relVy = b.vy - a.vy;
+    const relativeSpeedKmS = Math.hypot(relVx, relVy) * AU_YEAR_TO_KM_S;
+    
+    const dist = Math.max(distance, 1e-6);
+    const crossProduct = Math.abs((b.x - a.x) * relVy - (b.y - a.y) * relVx);
+    const bParam = clamp(crossProduct / (dist * Math.max(Math.hypot(relVx, relVy), 1e-6)), 0, 1);
+    const isGrazing = bParam > 0.62;
+
+    const primary = a.mass >= b.mass ? a : b;
+    const impactor = primary === a ? b : a;
+
+    if (primary.texture === "sun") {
+      spawnImpactEffect(a, b, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      mergeBodies(a, b, `STELLAR ENGULFMENT: ${primary.name} completely consumed ${impactor.name}!`);
+      return;
+    }
+
+    const speedStr = relativeSpeedKmS.toFixed(1);
+    let message = "";
+    if (isGrazing) {
+      message = `GRAZING PASS: ${a.name} & ${b.name} swiped at ${speedStr} km/s (Grazing factor ${bParam.toFixed(2)}) — Merged!`;
+    } else {
+      message = `DIRECT IMPACT: ${a.name} & ${b.name} collided at ${speedStr} km/s — Merged into unified world!`;
+    }
+
+    spawnImpactEffect(a, b, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    mergeBodies(a, b, message);
   }
 
   function mergeBodies(a, b, message) {
