@@ -1098,6 +1098,18 @@
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
       const speed = (.08 + Math.random() * .32) * intensity;
+      state.effects.push({
+        kind: "particle",
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1.2 + Math.random() * 1.5,
+        maxLife: 2.7,
+        size: Math.max(1.5, 3.5 * intensity),
+        color: Math.random() > .4 ? (a.mass > b.mass ? a.color : b.color) : "#ffd899",
+      });
+    }
     const gasCount = gasImpact ? Math.round(24 * intensity) : Math.round(7 * intensity);
     for (let i = 0; i < gasCount; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -2361,11 +2373,13 @@
   }
 
   function updateHUD() {
-    ui.simulationTime.textContent = state.simYears < 1 ? `${(state.simYears * 365.25).toFixed(1)} days` : `${state.simYears.toFixed(2)} years`;
-    ui.bodyCount.textContent = state.bodies.length;
-    ui.zoomValue.textContent = `${Math.round(state.camera.zoom / 30 * 100)}%`;
-    ui.runStatus.textContent = state.running ? "RUNNING" : "PAUSED";
-    ui.runStatus.parentElement.classList.toggle("paused", !state.running);
+    if (ui.simulationTime) ui.simulationTime.textContent = state.simYears < 1 ? `${(state.simYears * 365.25).toFixed(1)} days` : `${state.simYears.toFixed(2)} years`;
+    if (ui.bodyCount) ui.bodyCount.textContent = state.bodies.length;
+    if (ui.zoomValue) ui.zoomValue.textContent = `${Math.round(state.camera.zoom / 30 * 100)}%`;
+    if (ui.runStatus) {
+      ui.runStatus.textContent = state.running ? "RUNNING" : "PAUSED";
+      ui.runStatus.parentElement?.classList?.toggle("paused", !state.running);
+    }
     const throttled = state.running && state.speedDays >= 50 && state.effectiveSpeedDays < state.speedDays * .85;
     ui.timeScaleValue.value = throttled
       ? `${Math.round(state.effectiveSpeedDays)} actual / ${state.speedDays} requested`
@@ -2614,8 +2628,8 @@
     ui.orbitMode.setAttribute("aria-pressed", String(mode === "orbit"));
     ui.binaryMode.setAttribute("aria-pressed", String(mode === "binary"));
 
-    ui.impactOptions.hidden = mode !== "impact";
-    ui.orbitOptions.hidden = mode === "impact";
+    if (ui.impactOptions) ui.impactOptions.hidden = mode !== "impact";
+    if (ui.orbitOptions) ui.orbitOptions.hidden = mode === "impact";
 
     if (ui.launchAtTarget) {
       ui.launchAtTarget.innerHTML = mode === "autoOrbit"
@@ -2786,7 +2800,7 @@
   function renderSystemRoster() {
     if (!ui.systemRoster) return;
     if (!state.bodies.some((body) => body.id === state.launchTargetId)) state.launchTargetId = null;
-    ui.systemRoster.replaceChildren();
+    ui.systemRoster.innerHTML = "";
     ui.rosterCount.textContent = `${state.bodies.length} ${state.bodies.length === 1 ? "body" : "bodies"}`;
     const binaries = binaryPairs();
     for (const body of [...state.bodies].sort((a, b) => b.mass - a.mass)) {
